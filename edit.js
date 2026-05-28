@@ -12,23 +12,6 @@ document.getElementById("hitamkanBtn");
 
 let selectedFile;
 
-// MEDIAPIPE
-const faceDetection =
-new FaceDetection({
-
-    locateFile: (file)=>{
-
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`;
-    }
-});
-
-faceDetection.setOptions({
-
-    model: "short",
-
-    minDetectionConfidence: 0.3
-});
-
 imageInput.addEventListener(
 "change",
 (e)=>{
@@ -41,26 +24,19 @@ imageInput.addEventListener(
     previewImg.src =
     URL.createObjectURL(selectedFile);
 
-    previewImg.classList.add(
-        "show"
-    );
+    previewImg.classList.add("show");
 });
 
 hitamkanBtn.addEventListener(
 "click",
-async ()=>{
+()=>{
 
     if(!selectedFile){
 
-        alert(
-        "Upload gambar dulu"
-        );
+        alert("Upload gambar dulu");
 
         return;
     }
-
-    hitamkanBtn.innerText =
-    "Processing...";
 
     const img =
     new Image();
@@ -68,12 +44,10 @@ async ()=>{
     img.src =
     URL.createObjectURL(selectedFile);
 
-    img.onload = async ()=>{
+    img.onload = ()=>{
 
         const canvas =
-        document.createElement(
-            "canvas"
-        );
+        document.createElement("canvas");
 
         const ctx =
         canvas.getContext(
@@ -106,82 +80,89 @@ async ()=>{
         const data =
         imageData.data;
 
-        // detect face
-        let faceBox = null;
+        const width =
+        canvas.width;
 
-        faceDetection.onResults(
-        (results)=>{
+        const height =
+        canvas.height;
 
-            if(
-                results.detections &&
-                results.detections.length > 0
+        // =================================================
+        // AUTO PICK CENTER FACE COLOR
+        // =================================================
+
+        const centerX =
+        Math.floor(width / 2);
+
+        const centerY =
+        Math.floor(height / 3);
+
+        const sampleSize = 20;
+
+        let totalR = 0;
+        let totalG = 0;
+        let totalB = 0;
+        let count = 0;
+
+        for(
+            let y = centerY - sampleSize;
+            y < centerY + sampleSize;
+            y++
+        ){
+
+            for(
+                let x = centerX - sampleSize;
+                x < centerX + sampleSize;
+                x++
             ){
 
-                const box =
-                results
-                .detections[0]
-                .boundingBox;
+                if(
+                    x < 0 ||
+                    y < 0 ||
+                    x >= width ||
+                    y >= height
+                ) continue;
 
-                faceBox = box;
+                const i =
+                (y * width + x) * 4;
+
+                totalR += data[i];
+                totalG += data[i+1];
+                totalB += data[i+2];
+
+                count++;
             }
-        });
-
-        await faceDetection.send({
-            image: img
-        });
-
-        // fallback jika anime tidak terdeteksi
-        if(!faceBox){
-
-            faceBox = {
-
-                xmin: 0.2,
-                ymin: 0.15,
-
-                width: 0.6,
-                height: 0.7
-            };
         }
 
-        const fx =
-        faceBox.xmin *
-        canvas.width;
+        const baseSkin = {
 
-        const fy =
-        faceBox.ymin *
-        canvas.height;
-
-        const fw =
-        faceBox.width *
-        canvas.width;
-
-        const fh =
-        faceBox.height *
-        canvas.height;
-
-        // dark brown
-        const target = {
-
-            r: 92,
-            g: 58,
-            b: 38
+            r: totalR / count,
+            g: totalG / count,
+            b: totalB / count
         };
 
-        // process pixel
+        // =================================================
+        // BUILD SMOOTH MASK
+        // =================================================
+
+        const mask =
+        new Float32Array(
+            width * height
+        );
+
         for(
             let y = 0;
-            y < canvas.height;
+            y < height;
             y++
         ){
 
             for(
                 let x = 0;
-                x < canvas.width;
+                x < width;
                 x++
             ){
 
                 const index =
-                (y * canvas.width + x);
+                y * width + x;
 
                 const i =
                 index * 4;
@@ -190,64 +171,151 @@ async ()=>{
                 const g = data[i+1];
                 const b = data[i+2];
 
-                // area wajah/tubuh
-                const insideFace = (
+                // color distance
+                const dist =
+                Math.sqrt(
 
-                    x > fx - fw*0.3 &&
-                    x < fx + fw*1.3 &&
+                    (r - baseSkin.r) ** 2 +
 
-                    y > fy - fh*0.15 &&
-                    y < fy + fh*1.6
+                    (g - baseSkin.g) ** 2 +
+
+                    (b - baseSkin.b) ** 2
                 );
 
-                if(!insideFace)
-                continue;
+                // adaptive threshold
+                let alpha = 0;
 
-                // anime skin detect
-                const isSkin = (
+                if(dist < 95){
 
-                    r > 40 &&
-                    g > 20 &&
-                    b > 15 &&
+                    alpha =
+                    1 - (dist / 95);
+                }
 
-                    r >= g &&
-                    r >= b &&
-
-                    Math.abs(r-g) > 4
+                // face/body area bias
+                const faceBias =
+                Math.max(
+                    0,
+                    1 - (
+                        Math.abs(
+                            x - width/2
+                        ) / (width/2)
+                    )
                 );
 
-                if(isSkin){
+                alpha *= faceBias;
 
-                    // feather edge
-                    const cx =
-                    fx + fw/2;
+                mask[index] = alpha;
+            }
+        }
 
-                    const cy =
-                    fy + fh/2;
+        // =================================================
+        // FEATHER SMOOTH
+        // =================================================
 
-                    const dx =
-                    (x-cx)/(fw*0.9);
+        const smooth =
+        new Float32Array(
+            width * height
+        );
 
-                    const dy =
-                    (y-cy)/(fh*1.2);
+        const radius = 3;
 
-                    const dist =
-                    Math.sqrt(
-                        dx*dx + dy*dy
-                    );
+        for(
+            let y = 0;
+            y < height;
+            y++
+        ){
 
-                    const falloff =
-                    Math.max(
-                        0,
-                        1 - dist
-                    );
+            for(
+                let x = 0;
+                x < width;
+                x++
+            ){
+
+                let total = 0;
+                let count = 0;
+
+                for(
+                    let dy = -radius;
+                    dy <= radius;
+                    dy++
+                ){
+
+                    for(
+                        let dx = -radius;
+                        dx <= radius;
+                        dx++
+                    ){
+
+                        const nx = x + dx;
+                        const ny = y + dy;
+
+                        if(
+                            nx >= 0 &&
+                            ny >= 0 &&
+                            nx < width &&
+                            ny < height
+                        ){
+
+                            total +=
+                            mask[
+                                ny * width + nx
+                            ];
+
+                            count++;
+                        }
+                    }
+                }
+
+                smooth[
+                    y * width + x
+                ] = total / count;
+            }
+        }
+
+        // =================================================
+        // APPLY DARK BROWN
+        // =================================================
+
+        const target = {
+
+            r: 92,
+            g: 58,
+            b: 38
+        };
+
+        for(
+            let y = 0;
+            y < height;
+            y++
+        ){
+
+            for(
+                let x = 0;
+                x < width;
+                x++
+            ){
+
+                const index =
+                y * width + x;
+
+                const i =
+                index * 4;
+
+                const alpha =
+                smooth[index];
+
+                if(alpha > 0.03){
+
+                    const r = data[i];
+                    const g = data[i+1];
+                    const b = data[i+2];
 
                     // preserve shading
                     const brightness =
                     (r+g+b)/3 / 255;
 
                     const strength =
-                    0.58 * falloff;
+                    alpha * 0.72;
 
                     data[i] = Math.round(
 
@@ -282,6 +350,10 @@ async ()=>{
             }
         }
 
+        // =================================================
+        // RENDER FINAL
+        // =================================================
+
         ctx.putImageData(
             imageData,
             0,
@@ -293,11 +365,6 @@ async ()=>{
             "image/png"
         );
 
-        resultImg.classList.add(
-            "show"
-        );
-
-        hitamkanBtn.innerText =
-        "Hitamkan";
+        resultImg.classList.add("show");
     };
 });
