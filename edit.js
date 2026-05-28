@@ -12,7 +12,20 @@ document.getElementById("hitamkanBtn");
 
 let selectedFile;
 
-let pickedColor = null;
+// load BodyPix
+async function loadModel(){
+
+    return await bodyPix.load({
+
+        architecture: "MobileNetV1",
+        outputStride: 16,
+        multiplier: 0.75,
+        quantBytes: 2
+    });
+}
+
+let netPromise =
+loadModel();
 
 imageInput.addEventListener(
 "change",
@@ -31,74 +44,9 @@ imageInput.addEventListener(
     );
 });
 
-// PICK SKIN COLOR
-previewImg.addEventListener(
-"click",
-(e)=>{
-
-    const canvas =
-    document.createElement("canvas");
-
-    const ctx =
-    canvas.getContext("2d");
-
-    canvas.width =
-    previewImg.naturalWidth;
-
-    canvas.height =
-    previewImg.naturalHeight;
-
-    ctx.drawImage(
-        previewImg,
-        0,
-        0
-    );
-
-    const rect =
-    previewImg.getBoundingClientRect();
-
-    const scaleX =
-    previewImg.naturalWidth /
-    rect.width;
-
-    const scaleY =
-    previewImg.naturalHeight /
-    rect.height;
-
-    const x =
-    Math.floor(
-        (e.clientX - rect.left)
-        * scaleX
-    );
-
-    const y =
-    Math.floor(
-        (e.clientY - rect.top)
-        * scaleY
-    );
-
-    const pixel =
-    ctx.getImageData(
-        x,
-        y,
-        1,
-        1
-    ).data;
-
-    pickedColor = {
-        r: pixel[0],
-        g: pixel[1],
-        b: pixel[2]
-    };
-
-    alert(
-        "Warna kulit dipilih!"
-    );
-});
-
 hitamkanBtn.addEventListener(
 "click",
-()=>{
+async ()=>{
 
     if(!selectedFile){
 
@@ -109,14 +57,8 @@ hitamkanBtn.addEventListener(
         return;
     }
 
-    if(!pickedColor){
-
-        alert(
-        "Klik warna kulit dulu pada preview"
-        );
-
-        return;
-    }
+    hitamkanBtn.innerText =
+    "Processing...";
 
     const img =
     new Image();
@@ -124,7 +66,7 @@ hitamkanBtn.addEventListener(
     img.src =
     URL.createObjectURL(selectedFile);
 
-    img.onload = ()=>{
+    img.onload = async ()=>{
 
         const canvas =
         document.createElement(
@@ -151,6 +93,20 @@ hitamkanBtn.addEventListener(
             0
         );
 
+        // BODYPIX MODEL
+        const net =
+        await netPromise;
+
+        // segment person
+        const segmentation =
+        await net.segmentPerson(
+            img,
+            {
+                internalResolution:"medium",
+                segmentationThreshold:0.7
+            }
+        );
+
         const imageData =
         ctx.getImageData(
             0,
@@ -162,99 +118,58 @@ hitamkanBtn.addEventListener(
         const data =
         imageData.data;
 
+        // dark brown target
         const target = {
             r:92,
             g:58,
             b:38
         };
 
-        // smooth mask
-        const mask =
-        new Float32Array(
-            canvas.width *
-            canvas.height
-        );
+        // helper
+        function isSkinLike(r,g,b){
 
-        // DETECT SIMILAR COLOR
-        for(
-            let y=0;
-            y<canvas.height;
-            y++
-        ){
+            return (
 
-            for(
-                let x=0;
-                x<canvas.width;
-                x++
-            ){
+                r > 35 &&
+                g > 20 &&
+                b > 15 &&
 
-                const index =
-                y * canvas.width + x;
+                r >= g &&
+                r >= b &&
 
-                const i =
-                index * 4;
-
-                const r = data[i];
-                const g = data[i+1];
-                const b = data[i+2];
-
-                const dist = Math.sqrt(
-
-                    (r-pickedColor.r)**2 +
-
-                    (g-pickedColor.g)**2 +
-
-                    (b-pickedColor.b)**2
-                );
-
-                // tolerance
-                let alpha = 0;
-
-                if(dist < 85){
-
-                    alpha =
-                    1 - (dist / 85);
-                }
-
-                mask[index] = alpha;
-            }
+                Math.abs(r-g) > 5
+            );
         }
 
-        // APPLY DARK BROWN
+        // APPLY ONLY PERSON AREA
         for(
-            let y=0;
-            y<canvas.height;
-            y++
+            let i = 0;
+            i < segmentation.data.length;
+            i++
         ){
 
-            for(
-                let x=0;
-                x<canvas.width;
-                x++
-            ){
+            if(segmentation.data[i] === 1){
 
-                const index =
-                y * canvas.width + x;
+                const idx =
+                i * 4;
 
-                const i =
-                index * 4;
+                const r = data[idx];
+                const g = data[idx+1];
+                const b = data[idx+2];
 
-                const alpha =
-                mask[index];
+                // extra skin filter
+                if(
+                    isSkinLike(r,g,b)
+                ){
 
-                if(alpha > 0.01){
-
-                    const r = data[i];
-                    const g = data[i+1];
-                    const b = data[i+2];
-
+                    // preserve shading
                     const brightness =
                     (r+g+b)/3 / 255;
 
                     const strength =
-                    alpha * 0.58;
+                    0.48;
 
-                    data[i] = Math.round(
+                    data[idx] = Math.round(
 
                         r * (1-strength) +
 
@@ -264,7 +179,7 @@ hitamkanBtn.addEventListener(
                         ) * strength
                     );
 
-                    data[i+1] = Math.round(
+                    data[idx+1] = Math.round(
 
                         g * (1-strength) +
 
@@ -274,7 +189,7 @@ hitamkanBtn.addEventListener(
                         ) * strength
                     );
 
-                    data[i+2] = Math.round(
+                    data[idx+2] = Math.round(
 
                         b * (1-strength) +
 
@@ -287,6 +202,7 @@ hitamkanBtn.addEventListener(
             }
         }
 
+        // render final
         ctx.putImageData(
             imageData,
             0,
@@ -301,5 +217,8 @@ hitamkanBtn.addEventListener(
         resultImg.classList.add(
             "show"
         );
+
+        hitamkanBtn.innerText =
+        "Hitamkan";
     };
 });
