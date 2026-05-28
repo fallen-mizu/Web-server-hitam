@@ -42,6 +42,7 @@ hitamkanBtn.addEventListener("click", async () => {
         }
 
         resultImg.src = data.image;
+        resultImg.classList.add("show");
 
     } catch (err) {
 
