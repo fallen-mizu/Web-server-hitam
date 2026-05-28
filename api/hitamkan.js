@@ -74,7 +74,7 @@ export default async function handler(req, res) {
             },
             {
                 headers: {
-                    Authorization: "Bearer YOUR_HUGGINGFACE_TOKEN"
+                    Authorization: "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"
                 },
                 responseType: "arraybuffer"
             }
