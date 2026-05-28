@@ -3,14 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Waifu Perfect Tanning AI (MediaPipe)</title>
+    <title>Waifu Perfect Tanning AI (Instant Mode)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection"></script>
 </head>
 <body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-5">
 
@@ -24,14 +18,11 @@
 
         <div class="relative w-full min-h-[250px] bg-gray-700 rounded-xl overflow-hidden flex items-center justify-center mb-4">
             <canvas id="outputCanvas" class="max-w-full h-auto rounded-xl"></canvas>
-            <div id="loadingStatus" class="absolute inset-0 bg-gray-900/80 flex items-center justify-center hidden">
-                <span id="loadingText" class="text-lg font-medium text-pink-300">Memuat AI Wajah Google...</span>
-            </div>
         </div>
 
         <div class="space-y-3">
             <button id="tanBtn" class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 text-white py-2.5 rounded-lg font-semibold shadow-lg hidden transition duration-200 transform active:scale-95">
-                🔥 Hitamkan Kulit Wajah & Leher (AI)
+                🔥 Hitamkan Kulit Waifu Instan
             </button>
 
             <button id="downloadBtn" class="w-full bg-green-600 hover:bg-green-700 py-2.5 rounded-lg font-semibold shadow-lg hidden transition duration-200">
