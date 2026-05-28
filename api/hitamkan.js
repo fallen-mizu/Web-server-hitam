@@ -45,17 +45,14 @@ export default async function handler(req, res) {
         if (!req.file) {
 
             return res.status(400).json({
-                error: "No image uploaded"
+                error: "No image"
             });
         }
-
-        const base64 =
-        req.file.buffer.toString("base64");
 
         return res.status(200).json({
 
             image:
-            `data:${req.file.mimetype};base64,${base64}`
+            `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`
 
         });
 
