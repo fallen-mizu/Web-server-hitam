@@ -1,6 +1,6 @@
 import multer from "multer";
-const HF_TOKEN =
-process.env.HF_TOKEN;
+import axios from "axios";
+
 const upload = multer({
     storage: multer.memoryStorage()
 });
@@ -46,21 +46,80 @@ export default async function handler(req, res) {
         if (!req.file) {
 
             return res.status(400).json({
-                error: "No image"
+                error: "No image uploaded"
             });
         }
+
+        const HF_TOKEN =
+        process.env.HF_TOKEN;
+
+        if (!HF_TOKEN) {
+
+            return res.status(500).json({
+                error: "HF_TOKEN not found"
+            });
+        }
+
+        const imageBase64 =
+        req.file.buffer.toString("base64");
+
+        const response =
+        await axios.post(
+
+        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+
+        {
+            inputs:
+            `
+            dark brown skin tone,
+            realistic human skin,
+            preserve original face,
+            preserve original image,
+            preserve background,
+            preserve clothes,
+            preserve hair,
+            same person,
+            only skin color changes,
+            realistic lighting
+            `,
+
+            image: imageBase64
+        },
+
+        {
+            headers: {
+                Authorization:
+                `Bearer ${HF_TOKEN}`
+            },
+
+            responseType:
+            "arraybuffer"
+        });
+
+        const resultBase64 =
+        Buffer
+        .from(response.data)
+        .toString("base64");
 
         return res.status(200).json({
 
             image:
-            `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`
+            `data:image/png;base64,${resultBase64}`
 
         });
 
     } catch (err) {
 
+        console.log(
+            err.response?.data ||
+            err.message
+        );
+
         return res.status(500).json({
-            error: err.message
+
+            error:
+            "AI processing failed"
+
         });
     }
-}
+                }
