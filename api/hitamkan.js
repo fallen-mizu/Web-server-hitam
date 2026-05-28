@@ -56,47 +56,39 @@ export default async function handler(req, res) {
         if (!HF_TOKEN) {
 
             return res.status(500).json({
-                error: "HF_TOKEN not found"
+                error: "HF_TOKEN missing"
             });
         }
 
-        const imageBase64 =
-        req.file.buffer.toString("base64");
-
         const response =
-        await axios.post(
+        await axios({
 
-        "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+            method: "post",
 
-        {
-            inputs:
-            `
-            dark brown skin tone,
-            realistic human skin,
-            preserve original face,
-            preserve original image,
-            preserve background,
-            preserve clothes,
-            preserve hair,
-            same person,
-            only skin color changes,
-            realistic lighting
-            `,
+            url:
+            "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix",
 
-            image: imageBase64
-        },
-
-        {
             headers: {
                 Authorization:
-                `Bearer ${HF_TOKEN}`
+                `Bearer ${HF_TOKEN}`,
+                "Content-Type":
+                req.file.mimetype
             },
 
+            data:
+            req.file.buffer,
+
             responseType:
-            "arraybuffer"
+            "arraybuffer",
+
+            params: {
+
+                inputs:
+                "make skin darker naturally while preserving face, hair, clothes and background"
+            }
         });
 
-        const resultBase64 =
+        const base64 =
         Buffer
         .from(response.data)
         .toString("base64");
@@ -104,22 +96,23 @@ export default async function handler(req, res) {
         return res.status(200).json({
 
             image:
-            `data:image/png;base64,${resultBase64}`
+            `data:image/png;base64,${base64}`
 
         });
 
     } catch (err) {
 
         console.log(
-            err.response?.data ||
+            err.response?.data?.toString() ||
             err.message
         );
 
         return res.status(500).json({
 
             error:
-            "AI processing failed"
+            err.response?.data?.toString() ||
+            err.message
 
         });
     }
-                }
+}
