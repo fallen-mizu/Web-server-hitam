@@ -2,6 +2,7 @@
   "name": "waifu-skin-customizer",
   "version": "1.0.0",
   "description": "Web Customizer Waifu menggunakan Groq AI",
+  "type": "module",
   "main": "api/chat.js",
   "scripts": {
     "start": "node api/chat.js"
