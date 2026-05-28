@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1.0"
+/>
+
+<title>Hitamkan Kulit Anime</title>
+
+<style>
+
+body{
+
+    margin:0;
+    padding:40px 20px;
+
+    background:#0f1117;
+
+    font-family:Arial,sans-serif;
+
+    color:white;
+
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
+
+.container{
+
+    width:100%;
+    max-width:700px;
+
+    background:#1b1f2a;
+
+    border-radius:24px;
+
+    padding:25px;
+
+    box-sizing:border-box;
+
+    box-shadow:
+    0 0 30px rgba(0,0,0,.4);
+}
+
+h1{
+
+    text-align:center;
+
+    margin-bottom:25px;
+
+    font-size:30px;
+}
+
+.upload{
+
+    width:100%;
+
+    padding:16px;
+
+    border-radius:14px;
+
+    background:#2a3040;
+
+    color:white;
+
+    border:none;
+
+    margin-bottom:20px;
+
+    box-sizing:border-box;
+}
+
+button{
+
+    width:100%;
+
+    padding:16px;
+
+    border:none;
+
+    border-radius:14px;
+
+    background:#7c3aed;
+
+    color:white;
+
+    font-size:17px;
+
+    cursor:pointer;
+
+    transition:.2s;
+}
+
+button:hover{
+
+    transform:scale(1.02);
+
+    background:#8b5cf6;
+}
+
+img{
+
+    width:100%;
+
+    margin-top:20px;
+
+    border-radius:18px;
+
+    display:none;
+}
+
+img.show{
+
+    display:block;
+}
+
+.label{
+
+    margin-top:20px;
+
+    font-size:18px;
+
+    font-weight:bold;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Hitamkan Kulit Anime</h1>
+
+<input
+type="file"
+accept="image/*"
+id="imageInput"
+class="upload"
+/>
+
+<button id="hitamkanBtn">
+
+Hitamkan
+
+</button>
+
+<div class="label">
+Preview
+</div>
+
+<img id="previewImg"/>
+
+<div class="label">
+Hasil
+</div>
+
+<img id="resultImg"/>
+
+</div>
+
+<script src="edit.js"></script>
+
+</body>
+</html>
