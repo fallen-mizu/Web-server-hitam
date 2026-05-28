@@ -6,7 +6,123 @@
 
     <title>AI Hitamkan</title>
 
-     <link rel="stylesheet" href="./style.css">
+    <style>
+
+        *{
+            margin:0;
+            padding:0;
+            box-sizing:border-box;
+        }
+
+        body{
+            background:#0f0f0f;
+            color:white;
+            font-family:Arial,sans-serif;
+
+            display:flex;
+            justify-content:center;
+            align-items:center;
+
+            min-height:100vh;
+
+            padding:20px;
+        }
+
+        .container{
+            width:100%;
+            max-width:430px;
+
+            background:#181818;
+
+            padding:25px;
+
+            border-radius:22px;
+
+            box-shadow:
+            0 0 30px rgba(0,0,0,0.5);
+
+            text-align:center;
+        }
+
+        h1{
+            font-size:36px;
+            margin-bottom:10px;
+        }
+
+        p{
+            opacity:0.7;
+            margin-bottom:25px;
+        }
+
+        input[type="file"]{
+            width:100%;
+
+            background:#222;
+
+            color:white;
+
+            padding:12px;
+
+            border:none;
+
+            border-radius:12px;
+
+            margin-bottom:20px;
+        }
+
+        button{
+            width:100%;
+
+            padding:15px;
+
+            border:none;
+
+            border-radius:14px;
+
+            background:linear-gradient(
+                135deg,
+                #111,
+                #333
+            );
+
+            color:white;
+
+            font-size:18px;
+            font-weight:bold;
+
+            cursor:pointer;
+
+            transition:0.3s;
+        }
+
+        button:hover{
+            transform:scale(1.02);
+
+            background:linear-gradient(
+                135deg,
+                #222,
+                #444
+            );
+        }
+
+        .previewBox,
+        .resultBox{
+            margin-top:25px;
+        }
+
+        img{
+            width:100%;
+
+            border-radius:18px;
+
+            display:none;
+        }
+
+        .show{
+            display:block !important;
+        }
+
+    </style>
 </head>
 <body>
 
@@ -18,7 +134,11 @@
         Upload gambar lalu tekan tombol Hitamkan
     </p>
 
-    <input type="file" id="imageInput" accept="image/*">
+    <input
+        type="file"
+        id="imageInput"
+        accept="image/*"
+    >
 
     <button id="hitamkanBtn">
         Hitamkan
@@ -34,6 +154,100 @@
 
 </div>
 
-<script src="./app.js"></script>
+<script>
+
+const imageInput =
+document.getElementById("imageInput");
+
+const previewImg =
+document.getElementById("previewImg");
+
+const resultImg =
+document.getElementById("resultImg");
+
+const hitamkanBtn =
+document.getElementById("hitamkanBtn");
+
+let selectedFile;
+
+imageInput.addEventListener(
+"change",
+(e)=>{
+
+    selectedFile = e.target.files[0];
+
+    if(!selectedFile) return;
+
+    previewImg.src =
+    URL.createObjectURL(selectedFile);
+
+    previewImg.classList.add("show");
+});
+
+hitamkanBtn.addEventListener(
+"click",
+async ()=>{
+
+    if(!selectedFile){
+
+        alert(
+        "Upload gambar terlebih dahulu"
+        );
+
+        return;
+    }
+
+    hitamkanBtn.innerText =
+    "Processing...";
+
+    const formData =
+    new FormData();
+
+    formData.append(
+        "image",
+        selectedFile
+    );
+
+    try{
+
+        const response =
+        await fetch(
+        "/api/hitamkan",
+        {
+            method:"POST",
+            body:formData
+        });
+
+        const data =
+        await response.json();
+
+        if(data.error){
+
+            alert(data.error);
+
+            hitamkanBtn.innerText =
+            "Hitamkan";
+
+            return;
+        }
+
+        resultImg.src =
+        data.image;
+
+        resultImg.classList.add(
+        "show"
+        );
+
+    }catch(err){
+
+        alert(err.message);
+    }
+
+    hitamkanBtn.innerText =
+    "Hitamkan";
+});
+
+</script>
+
 </body>
 </html>
