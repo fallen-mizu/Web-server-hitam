@@ -1,179 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="id">
 <head>
-
-<meta charset="UTF-8">
-
-<meta
-name="viewport"
-content="width=device-width, initial-scale=1.0"
-/>
-
-<title>Hitamkan Kulit Anime</title>
-
-<style>
-
-body{
-
-    margin:0;
-    padding:40px 20px;
-
-    background:#0f1117;
-
-    font-family:Arial,sans-serif;
-
-    color:white;
-
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-}
-
-.container{
-
-    width:100%;
-    max-width:700px;
-
-    background:#1b1f2a;
-
-    border-radius:24px;
-
-    padding:25px;
-
-    box-sizing:border-box;
-
-    box-shadow:
-    0 0 30px rgba(0,0,0,.4);
-}
-
-h1{
-
-    text-align:center;
-
-    margin-bottom:25px;
-
-    font-size:30px;
-}
-
-.upload{
-
-    width:100%;
-
-    padding:16px;
-
-    border-radius:14px;
-
-    background:#2a3040;
-
-    color:white;
-
-    border:none;
-
-    margin-bottom:20px;
-
-    box-sizing:border-box;
-}
-
-button{
-
-    width:100%;
-
-    padding:16px;
-
-    border:none;
-
-    border-radius:14px;
-
-    background:#7c3aed;
-
-    color:white;
-
-    font-size:17px;
-
-    cursor:pointer;
-
-    transition:.2s;
-}
-
-button:hover{
-
-    transform:scale(1.02);
-
-    background:#8b5cf6;
-}
-
-img{
-
-    width:100%;
-
-    margin-top:20px;
-
-    border-radius:18px;
-
-    display:none;
-}
-
-img.show{
-
-    display:block;
-}
-
-.label{
-
-    margin-top:20px;
-
-    font-size:18px;
-
-    font-weight:bold;
-}
-
-</style>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waifu Skin Tone Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation"></script>
 </head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-5">
 
-<body>
+    <div class="max-w-md w-full bg-gray-800 p-6 rounded-2xl shadow-xl text-center">
+        <h1 class="text-2xl font-bold mb-4 text-purple-400">Waifu Skin Customizer</h1>
+        
+        <input type="file" id="upload" accept="image/*" class="hidden">
+        <label for="upload" class="cursor-pointer bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg font-medium inline-block mb-4">
+            Pilih Gambar Waifu
+        </label>
 
-<div class="container">
+        <div class="relative w-full min-h-[250px] bg-gray-700 rounded-xl overflow-hidden flex items-center justify-center mb-4">
+            <canvas id="outputCanvas" class="max-w-full h-auto rounded-xl"></canvas>
+        </div>
 
-<h1>Hitamkan Kulit Anime</h1>
+        <div class="mb-4">
+            <label class="block text-sm font-medium mb-1">Tingkat Kegelapan Kulit</label>
+            <input type="range" id="darkness" min="0" max="100" value="50" class="w-full accent-purple-500">
+        </div>
 
-<input
-type="file"
-accept="image/*"
-id="imageInput"
-class="upload"
-/>
+        <button id="downloadBtn" class="w-full bg-green-600 hover:bg-green-700 py-2 rounded-lg font-semibold hidden">
+            Download Hasil
+        </button>
+    </div>
 
-<button id="hitamkanBtn">
-
-Hitamkan
-
-</button>
-
-<div class="label">
-Preview
-</div>
-
-<img id="previewImg"/>
-    <p id="pickerInfo">
-Klik bagian kulit pada gambar preview
-    </p>
-
-<div class="label">
-Hasil
-</div>
-
-<img id="resultImg"/>
-
-</div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-    
-
-<script src="edit.js"></script>
-
+    <script src="script.js"></script>
 </body>
 </html>
