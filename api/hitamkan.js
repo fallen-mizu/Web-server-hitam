@@ -84,12 +84,12 @@ formData.append(
 
         formData.append(
             "image_strength",
-            "0.35"
+            ""0.2""
         );
 
         formData.append(
             "text_prompts[0][text]",
-            "dark brown skin tone, preserve face, preserve clothes, preserve background, realistic human skin"
+            "dark brown skin tone, preserve face, preserve clothes, preserve background, just change the skin color"
         );
 
         const response =
