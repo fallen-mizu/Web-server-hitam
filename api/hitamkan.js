@@ -139,6 +139,21 @@ export default async function handler(req, res) {
     );
 
     if (isSkin) {
+        for (
+    let i = 0;
+    i < data.length;
+    i += info.channels
+) {
+
+    data[i] =
+    Math.min(255, data[i] * 0.98);
+
+    data[i + 1] =
+    Math.min(255, data[i + 1] * 0.98);
+
+    data[i + 2] =
+    Math.min(255, data[i + 2] * 0.98);
+        }
 
         // dark brown target
         const targetR = 92;
