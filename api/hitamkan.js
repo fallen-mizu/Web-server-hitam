@@ -109,56 +109,89 @@ export default async function handler(req, res) {
         });
 
         for (
-            let i = 0;
-            i < data.length;
-            i += info.channels
-        ) {
+    let i = 0;
+    i < data.length;
+    i += info.channels
+) {
 
-            let r = data[i];
-            let g = data[i + 1];
-            let b = data[i + 2];
+    let r = data[i];
+    let g = data[i + 1];
+    let b = data[i + 2];
 
-            const hsv =
-            rgbToHsv(r, g, b);
+    // brightness
+    const avg =
+    (r + g + b) / 3;
 
-            // skin detect jauh lebih smooth
-            const isSkin = (
+    // anime skin detect lebih luas
+    const isSkin = (
 
-                hsv.h > 0 &&
-                hsv.h < 45 &&
+        r > 40 &&
+        g > 25 &&
+        b > 20 &&
 
-                hsv.s > 0.15 &&
-                hsv.s < 0.75 &&
+        r >= g &&
+        r >= b &&
 
-                hsv.v > 0.25
-            );
+        avg > 45 &&
 
-            if (isSkin) {
+        Math.abs(r - g) < 80 &&
+        Math.abs(r - b) < 120
+    );
 
-                // dark brown blend smooth
-                const blend = 0.35;
+    if (isSkin) {
 
-                const targetR = 92;
-                const targetG = 58;
-                const targetB = 38;
+        // dark brown target
+        const targetR = 92;
+        const targetG = 58;
+        const targetB = 38;
 
-                data[i] = Math.round(
+        // preserve shading
+        const shade =
+        avg / 255;
+
+        // blend lebih kuat
+        const blend = 0.55;
+
+        data[i] = Math.max(
+            0,
+
+            Math.min(
+                255,
+
+                Math.round(
                     r * (1 - blend) +
-                    targetR * blend
-                );
+                    targetR * blend * shade
+                )
+            )
+        );
 
-                data[i + 1] = Math.round(
+        data[i + 1] = Math.max(
+            0,
+
+            Math.min(
+                255,
+
+                Math.round(
                     g * (1 - blend) +
-                    targetG * blend
-                );
+                    targetG * blend * shade
+                )
+            )
+        );
 
-                data[i + 2] = Math.round(
+        data[i + 2] = Math.max(
+            0,
+
+            Math.min(
+                255,
+
+                Math.round(
                     b * (1 - blend) +
-                    targetB * blend
-                );
-            }
-        }
-
+                    targetB * blend * shade
+                )
+            )
+        );
+    }
+    }
         const output =
         await sharp(data, {
 
@@ -171,7 +204,7 @@ export default async function handler(req, res) {
         })
 
         // smoothing agar tidak bercak
-        .blur(0.6)
+        .median(1)
 
         .png({
             quality: 100,
