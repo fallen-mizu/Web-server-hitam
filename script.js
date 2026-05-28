@@ -5,7 +5,7 @@ const darknessSlider = document.getElementById('darkness');
 const downloadBtn = document.getElementById('downloadBtn');
 
 let originalImage = null;
-let activeBox = null; // Menyimpan koordinat area wajah dari Groq Vision
+let activeBox = null; 
 
 upload.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -20,7 +20,7 @@ upload.addEventListener('change', (e) => {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
             
-            // Kompresi gambar otomatis agar aman dari payload limit Vercel (4.5MB)
+            // Kompresi otomatis bypass payload limit Vercel
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             let maxDim = 800;
@@ -70,18 +70,17 @@ async function hubungiGroqVision(base64Image) {
             activeBox = data.box;
             alert("Groq AI Vision sukses mengunci area kulit wajah!");
         } else {
-            // Fallback aman jika respon berbentuk array langsung
-            activeBox = data.boxes ? data.boxes[0] : [15, 30, 75, 70];
+            activeBox = data.boxes ? data.boxes[0] : [10, 25, 80, 75];
             alert("Sistem Vision aktif menggunakan kalibrasi otomatis.");
         }
     } catch (error) {
         console.error(error);
-        activeBox = [15, 30, 75, 70]; // Default area wajah jika API gagal merespon
+        activeBox = [10, 25, 80, 75]; 
         alert("Menggunakan mode pemindaian cerdas fallback.");
     }
 }
 
-// MESIN MANIPULASI WARNA KULIT ANTI-BOCOR
+// TANNING ENGINE - VERSI TOLERANSI TINGGI (ANTI-MACET)
 function processImage() {
     if (!originalImage || !activeBox) return;
 
@@ -92,7 +91,7 @@ function processImage() {
     const data = imgData.data;
     const factor = darknessSlider.value / 100;
 
-    // Konversi koordinat persen (0-100) Groq ke ukuran pixel canvas riil
+    // Konversi koordinat persen Groq ke ukuran pixel canvas riil
     const ymin = Math.max(0, Math.floor((activeBox[0] / 100) * canvas.height));
     const xmin = Math.max(0, Math.floor((activeBox[1] / 100) * canvas.width));
     const ymax = Math.min(canvas.height, Math.floor((activeBox[2] / 100) * canvas.height));
@@ -107,20 +106,21 @@ function processImage() {
             let g = data[i + 1];
             let b = data[i + 2];
 
-            // VALIDASI SPEKTRUM KULIT ANIME (RGB-Selective Layer Mask)
-            // 1. Komponen Merah (R) harus dominan dibanding Green dan Blue (Rona Krem/Kulit Manusia)
-            // 2. Bukan outline garis hitam gambar (Kecerahan rata-rata > 40)
-            const isSkinTone = (r > g && r > b - 20) && ((r + g + b) / 3 > 40);
+            // VALIDASI SPEKTRUM KULIT DENGAN TOLERANSI DILONGGARKAN
+            // Karena gambar memiliki tint ungu/biru, syarat R > G kita longgarkan menjadi r > g - 15
+            const isSkinTone = (r > g - 15) && (r > b - 25) && ((r + g + b) / 3 > 30);
 
-            // 3. Proteksi Rambut Putih/Kebiruan: Rambut Arisu yang putih netral memiliki nilai R, G, B yang sangat mirip/identik.
-            // Jika selisih antar warna sangat tipis (di bawah 15), itu dipastikan adalah rambut putih atau baju, maka kita SKIP.
-            const isNotWhiteHair = Math.abs(r - b) > 14 || Math.abs(g - b) > 14;
+            // Proteksi agar warna garis outline hitam komik tidak ikut luntur
+            const isNotDarkOutline = (r < 30 && g < 30 && b < 30) ? false : true;
 
-            if (isSkinTone && isNotWhiteHair) {
+            // Proteksi rambut putih: Jika nilai RGB benar-benar identik sama (seperti abu-abu/putih murni), skip.
+            const isNotPureWhiteHair = Math.abs(r - g) > 6 || Math.abs(r - b) > 6;
+
+            if (isSkinTone && isNotDarkOutline && isNotPureWhiteHair) {
                 // ALGORITMA PERPADUAN WARNA COKLAT MATANG (WARM TANNING BLEND)
-                const targetR = 0.76; // Mempertahankan undertone hangat
-                const targetG = 0.54; // Menstabilkan gradasi bayangan
-                const targetB = 0.36; // Memangkas rona biru agar berubah menjadi coklat eksotis
+                const targetR = 0.76; 
+                const targetG = 0.54; 
+                const targetB = 0.36; 
 
                 data[i]     = Math.round(r * (1 - factor) + (r * targetR) * factor);
                 data[i + 1] = Math.round(g * (1 - factor) + (g * targetG) * factor);
@@ -129,7 +129,7 @@ function processImage() {
         }
     }
 
-    // Render kembali piksel yang sudah di-tanning secara mulus ke canvas
+    // Render kembali ke canvas utama
     ctx.putImageData(imgData, 0, 0);
 }
 
@@ -141,3 +141,4 @@ downloadBtn.addEventListener('click', () => {
     link.href = canvas.toDataURL('image/png');
     link.click();
 });
+        
