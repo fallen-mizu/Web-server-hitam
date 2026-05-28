@@ -61,10 +61,11 @@ upload.addEventListener('change', (e) => {
     reader.readAsDataURL(file);
 });
 
-// 2. Hubungi backend Groq Vision resmi
+// 2. Hubungi backend Groq Vision resmi di Cloudflare Workers
 async function hubungiGroqVision(base64Image) {
     try {
-        const response = await fetch('/api/chat', {
+        // Menggunakan window.location.origin agar otomatis menembak domain Worker kamu yang aktif
+        const response = await fetch(`${window.location.origin}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: base64Image })
@@ -81,10 +82,11 @@ async function hubungiGroqVision(base64Image) {
             activeBox = data.boxes ? data.boxes[0] : [10, 25, 80, 75];
         }
     } catch (error) {
-        console.error(error);
-        activeBox = [10, 25, 80, 75]; // Fallback area wajah standar
+        console.error("Gagal menghubungi backend Worker:", error);
+        activeBox = [10, 25, 80, 75]; // Fallback area wajah standar jika offline
     }
 }
+
 
 // 3. Fungsi Eksekusi Tanning Sekali Klik
 function triggerTanning() {
