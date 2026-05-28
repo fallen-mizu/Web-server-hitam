@@ -1,6 +1,4 @@
 import multer from "multer";
-import axios from "axios";
-import FormData from "form-data";
 import sharp from "sharp";
 
 const upload = multer({
@@ -52,102 +50,79 @@ export default async function handler(req, res) {
             });
         }
 
-        const API_KEY =
-        process.env.STABILITY_API_KEY;
+        const image =
+        sharp(req.file.buffer);
 
-        if (!API_KEY) {
+        const {
+            data,
+            info
+        } = await image
+        .raw()
+        .toBuffer({ resolveWithObject: true });
 
-            return res.status(500).json({
-                error: "Missing STABILITY_API_KEY"
-            });
+        for (
+            let i = 0;
+            i < data.length;
+            i += info.channels
+        ) {
+
+            let r = data[i];
+            let g = data[i + 1];
+            let b = data[i + 2];
+
+            // deteksi warna kulit anime/manusia
+            const isSkin = (
+
+                r > 95 &&
+                g > 40 &&
+                b > 20 &&
+
+                r > g &&
+                r > b &&
+
+                Math.abs(r - g) > 15
+            );
+
+            if (isSkin) {
+
+                // hitamkan kulit
+                data[i] =
+                Math.max(0, r * 0.65);
+
+                data[i + 1] =
+                Math.max(0, g * 0.65);
+
+                data[i + 2] =
+                Math.max(0, b * 0.65);
+            }
         }
 
-        // resize agar support SDXL
-        const resizedBuffer =
-        await sharp(req.file.buffer)
-
-        .resize(1024, 1024)
+        const output =
+        await sharp(data, {
+            raw: {
+                width: info.width,
+                height: info.height,
+                channels: info.channels
+            }
+        })
 
         .png()
 
         .toBuffer();
 
-        const formData =
-        new FormData();
-
-        formData.append(
-            "image",
-            resizedBuffer,
-            {
-                filename: "image.png"
-            }
-        );
-
-        formData.append(
-            "prompt",
-            `
-            darker brown skin tone,
-            preserve original face,
-            preserve clothes,
-            preserve background,
-            preserve hairstyle,
-            same character,
-            only skin color changes
-            `
-        );
-
-        formData.append(
-            "search_prompt",
-            "skin"
-        );
-
-        const response =
-        await axios.post(
-
-        "https://api.stability.ai/v2beta/stable-image/edit/search-and-replace",
-
-        formData,
-
-        {
-            headers: {
-                Authorization:
-                `Bearer ${API_KEY}`,
-
-                Accept:
-                "image/*",
-
-                ...formData.getHeaders()
-            },
-
-            responseType:
-            "arraybuffer"
-        });
-
-        const base64 =
-        Buffer
-        .from(response.data)
-        .toString("base64");
-
         return res.status(200).json({
 
             image:
-            `data:image/png;base64,${base64}`
+            `data:image/png;base64,${output.toString("base64")}`
 
         });
 
     } catch (err) {
 
-        console.log(
-            err.response?.data?.toString() ||
-            err.message
-        );
-
         return res.status(500).json({
 
             error:
-            err.response?.data?.toString() ||
             err.message
-
         });
     }
-                }
+                                      }
