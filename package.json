@@ -5,6 +5,7 @@
   "dependencies": {
     "multer": "^1.4.5-lts.1",
     "axios": "^1.7.2",
+    "@groq/groq-sdk": "latest",
      "form-data": "^4.0.0",
     "sharp": "^0.33.4"
   }
