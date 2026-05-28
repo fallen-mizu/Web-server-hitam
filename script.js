@@ -4,17 +4,7 @@ const ctx = canvas.getContext('2d');
 const darknessSlider = document.getElementById('darkness');
 const downloadBtn = document.getElementById('downloadBtn');
 
-let segmenter;
 let originalImage = null;
-
-// Initialize AI Segmenter (MediaPipe Selfie Segmentation)
-async function initAI() {
-    const model = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation;
-    const segmenterConfig = { runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation' };
-    segmenter = await bodySegmentation.createSegmenter(model, segmenterConfig);
-    console.log("AI Model Loaded!");
-}
-initAI();
 
 // Handle Image Upload
 upload.addEventListener('change', (e) => {
@@ -37,46 +27,47 @@ upload.addEventListener('change', (e) => {
     reader.readAsDataURL(file);
 });
 
-// Jalankan proses manipulasi warna berdasarkan segmentasi AI
-async function processImage() {
-    if (!originalImage || !segmenter) return;
+// Fungsi manipulasi warna kulit anime berbasis Pixel-Color Filter
+function processImage() {
+    if (!originalImage) return;
 
-    // 1. Gambar ulang image asli ke canvas
+    // 1. Gambar ulang image asli ke canvas agar slider bisa digeser bolak-balik
     ctx.drawImage(originalImage, 0, 0);
     
-    // 2. Dapatkan segmentasi (masker tubuh/kulit)
-    const segmentation = await segmenter.segmentPeople(canvas);
-    const mask = await bodySegmentation.toBinaryMask(segmentation);
-
-    // 3. Ambil data piksel canvas
+    // 2. Ambil data piksel canvas
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
-    const maskData = mask.data; // Berisi nilai 0 atau 255 (area orang/kulit)
 
-    const factor = darknessSlider.value / 100; // 0 sampai 1
+    // Ambil nilai dari slider (0 sampai 1)
+    const factor = darknessSlider.value / 100; 
 
-    // 4. Lakukan looping pada setiap piksel
+    // 3. Lakukan looping pada setiap piksel gambar
     for (let i = 0; i < data.length; i += 4) {
-        // Jika piksel termasuk dalam masker AI (area karakter/kulit)
-        if (maskData[i] === 255) {
-            let r = data[i];
-            let g = data[i + 1];
-            let b = data[i + 2];
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
 
-            // Algoritma akurat: kurangi kecerahan (Luminance) tapi pertahankan tone warna asli
-            // Agar tidak merubah baju/rambut terlalu ekstrem, kita filter warna kulit (opsional)
-            // Di sini kita turunkan RGB secara proporsional berdasarkan slider
-            data[i]     = r * (1 - factor * 0.4); // Menggelapkan merah
-            data[i + 1] = g * (1 - factor * 0.5); // Menggelapkan hijau lebih banyak untuk efek kecoklatan
-            data[i + 2] = b * (1 - factor * 0.6); // Menggelapkan biru agar menghasilkan tone warm/tan
+        // DETEKSI WARNA KULIT ANIME (Krem, Putih, Merah Muda Pucat)
+        // Karakteristik kulit anime umumnya: R > G, G > B, dan tingkat kecerahan tinggi.
+        const isSkinColor = (r > 60 && g > 40 && b > 30) && 
+                            (r > g && g >= b) && 
+                            (r - g >= 15) && 
+                            (r > 120); // Menandakan area terang/kulit
+
+        if (isSkinColor) {
+            // Rumus mengubah tone menjadi coklat/melanin matang
+            // Mengurangi persentase RGB secara proporsional agar bayangan asli waifu tidak hilang
+            data[i]     = r * (1 - factor * 0.35); // Kurangi merah sedikit (agar tetap hangat/warm tone)
+            data[i + 1] = g * (1 - factor * 0.50); // Kurangi hijau lebih banyak
+            data[i + 2] = b * (1 - factor * 0.65); // Kurangi biru paling banyak (menciptakan warna eksotis/tan)
         }
     }
 
-    // 5. Masukkan kembali data piksel yang sudah diubah ke canvas
+    // 4. Masukkan kembali data piksel yang sudah diubah ke canvas
     ctx.putImageData(imgData, 0, 0);
 }
 
-// Update otomatis saat slider digeser
+// Jalankan fungsi setiap kali slider digeser
 darknessSlider.addEventListener('input', processImage);
 
 // Download Handler
