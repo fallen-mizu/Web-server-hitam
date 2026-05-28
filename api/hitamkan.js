@@ -1,32 +1,29 @@
-import formidable from "formidable";
-import fs from "fs-extra";
+import multer from "multer";
 
-export const config = {
-    api: {
-        bodyParser: false,
-    },
-};
+const upload = multer({
+    storage: multer.memoryStorage()
+});
 
-function parseForm(req) {
+function runMiddleware(req, res, fn) {
 
     return new Promise((resolve, reject) => {
 
-        const form = formidable({
-            multiples: false,
-            keepExtensions: true,
-        });
+        fn(req, res, (result) => {
 
-        form.parse(req, (err, fields, files) => {
-
-            if (err) {
-                reject(err);
-                return;
+            if (result instanceof Error) {
+                return reject(result);
             }
 
-            resolve({ fields, files });
+            resolve(result);
         });
     });
 }
+
+export const config = {
+    api: {
+        bodyParser: false
+    }
+};
 
 export default async function handler(req, res) {
 
@@ -39,28 +36,26 @@ export default async function handler(req, res) {
 
     try {
 
-        const { files } = await parseForm(req);
+        await runMiddleware(
+            req,
+            res,
+            upload.single("image")
+        );
 
-        const imageFile =
-        files.image?.[0] || files.image;
-
-        if (!imageFile) {
+        if (!req.file) {
 
             return res.status(400).json({
                 error: "No image uploaded"
             });
         }
 
-        const imageBuffer =
-        await fs.readFile(imageFile.filepath);
-
         const base64 =
-        imageBuffer.toString("base64");
+        req.file.buffer.toString("base64");
 
         return res.status(200).json({
 
             image:
-            `data:image/jpeg;base64,${base64}`
+            `data:${req.file.mimetype};base64,${base64}`
 
         });
 
@@ -70,4 +65,4 @@ export default async function handler(req, res) {
             error: err.message
         });
     }
-    }
+}
