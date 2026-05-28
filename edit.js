@@ -95,178 +95,152 @@ hitamkanBtn.addEventListener(
         const height =
         canvas.height;
 
-        // =========================================
-        // AUTO SKIN SAMPLE
-        // =========================================
+        // ====================================
+        // AUTO FACE SAMPLE
+        // ====================================
 
-        const centerX =
+        const startX =
         Math.floor(width / 2);
 
-        const centerY =
+        const startY =
         Math.floor(height / 3);
 
-        let sampleR = 0;
-        let sampleG = 0;
-        let sampleB = 0;
-        let sampleCount = 0;
-
-        for(
-            let y = centerY - 25;
-            y < centerY + 25;
-            y++
-        ){
-
-            for(
-                let x = centerX - 25;
-                x < centerX + 25;
-                x++
-            ){
-
-                if(
-                    x < 0 ||
-                    y < 0 ||
-                    x >= width ||
-                    y >= height
-                ) continue;
-
-                const i =
-                (y * width + x) * 4;
-
-                const r = data[i];
-                const g = data[i+1];
-                const b = data[i+2];
-
-                // skip oversaturated anime hair
-                const max =
-                Math.max(r,g,b);
-
-                const min =
-                Math.min(r,g,b);
-
-                const sat =
-                (max-min)/(max||1);
-
-                if(sat > 0.45)
-                continue;
-
-                sampleR += r;
-                sampleG += g;
-                sampleB += b;
-
-                sampleCount++;
-            }
-        }
+        const startIndex =
+        (startY * width + startX) * 4;
 
         const baseSkin = {
 
-            r: sampleR / sampleCount,
-            g: sampleG / sampleCount,
-            b: sampleB / sampleCount
+            r: data[startIndex],
+            g: data[startIndex + 1],
+            b: data[startIndex + 2]
         };
 
-        // =========================================
-        // BUILD MASK
-        // =========================================
+        // ====================================
+        // FLOOD FILL MASK
+        // ====================================
 
         const mask =
         new Float32Array(
             width * height
         );
 
-        for(
-            let y = 0;
-            y < height;
-            y++
+        const visited =
+        new Uint8Array(
+            width * height
+        );
+
+        const queue = [
+            [startX,startY]
+        ];
+
+        function distance(
+            r1,g1,b1,
+            r2,g2,b2
         ){
 
-            for(
-                let x = 0;
-                x < width;
-                x++
-            ){
+            return Math.sqrt(
 
-                const index =
-                y * width + x;
+                (r1-r2)**2 +
 
-                const i =
-                index * 4;
+                (g1-g2)**2 +
 
-                const r = data[i];
-                const g = data[i+1];
-                const b = data[i+2];
-
-                const max =
-                Math.max(r,g,b);
-
-                const min =
-                Math.min(r,g,b);
-
-                const saturation =
-                (max-min)/(max||1);
-
-                // exclude vivid anime hair
-                if(
-                    saturation > 0.48
-                ){
-                    continue;
-                }
-
-                // exclude strong yellow/orange
-                if(
-                    r > 160 &&
-                    g > 120 &&
-                    b < 120
-                ){
-                    continue;
-                }
-
-                // exclude dark regions
-                const brightness =
-                (r+g+b)/3;
-
-                if(brightness < 45)
-                continue;
-
-                // color distance
-                const dist =
-                Math.sqrt(
-
-                    (r-baseSkin.r)**2 +
-
-                    (g-baseSkin.g)**2 +
-
-                    (b-baseSkin.b)**2
-                );
-
-                if(dist < 75){
-
-                    let alpha =
-                    1 - (dist / 75);
-
-                    // center bias
-                    const cx =
-                    Math.abs(
-                        x - width/2
-                    ) / (width/2);
-
-                    alpha *=
-                    (1 - cx * 0.3);
-
-                    mask[index] = alpha;
-                }
-            }
+                (b1-b2)**2
+            );
         }
 
-        // =========================================
+        while(queue.length){
+
+            const [x,y] =
+            queue.shift();
+
+            if(
+                x < 0 ||
+                y < 0 ||
+                x >= width ||
+                y >= height
+            ) continue;
+
+            const index =
+            y * width + x;
+
+            if(visited[index])
+            continue;
+
+            visited[index] = 1;
+
+            const i =
+            index * 4;
+
+            const r = data[i];
+            const g = data[i+1];
+            const b = data[i+2];
+
+            // brightness
+            const brightness =
+            (r+g+b)/3;
+
+            if(brightness < 35)
+            continue;
+
+            // saturation
+            const max =
+            Math.max(r,g,b);
+
+            const min =
+            Math.min(r,g,b);
+
+            const saturation =
+            (max-min)/(max||1);
+
+            // skip vivid anime hair
+            if(
+                saturation > 0.42
+            ) continue;
+
+            // stronger skin rule
+            if(
+                r < g ||
+                r < b
+            ) continue;
+
+            // distance from skin sample
+            const dist =
+            distance(
+
+                r,g,b,
+
+                baseSkin.r,
+                baseSkin.g,
+                baseSkin.b
+            );
+
+            // adaptive threshold
+            if(dist > 48)
+            continue;
+
+            // smooth alpha
+            const alpha =
+            1 - (dist / 48);
+
+            mask[index] = alpha;
+
+            // flood neighbors
+            queue.push([x+1,y]);
+            queue.push([x-1,y]);
+            queue.push([x,y+1]);
+            queue.push([x,y-1]);
+        }
+
+        // ====================================
         // FEATHER SMOOTH
-        // =========================================
+        // ====================================
 
         const smooth =
         new Float32Array(
             width * height
         );
 
-        const radius = 4;
+        const radius = 5;
 
         for(
             let y = 0;
@@ -321,9 +295,9 @@ hitamkanBtn.addEventListener(
             }
         }
 
-        // =========================================
+        // ====================================
         // APPLY DARK BROWN
-        // =========================================
+        // ====================================
 
         for(
             let y = 0;
@@ -346,7 +320,7 @@ hitamkanBtn.addEventListener(
                 const alpha =
                 smooth[index];
 
-                if(alpha > 0.02){
+                if(alpha > 0.015){
 
                     const r = data[i];
                     const g = data[i+1];
@@ -362,7 +336,7 @@ hitamkanBtn.addEventListener(
                     ) / 255;
 
                     const strength =
-                    alpha * 0.82;
+                    alpha * 0.88;
 
                     const darkR =
                     92 * luminance;
@@ -397,9 +371,9 @@ hitamkanBtn.addEventListener(
             }
         }
 
-        // =========================================
-        // RENDER
-        // =========================================
+        // ====================================
+        // RENDER FINAL
+        // ====================================
 
         ctx.putImageData(
             imageData,
