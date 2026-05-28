@@ -54,6 +54,7 @@ function rgbToHsl(r, g, b) {
 
 // Fungsi Utama: Mengubah warna kulit waifu secara presisi
 function processImage() {
+function processImage() {
     if (!originalImage) return;
 
     // Gambar ulang gambar asli ke canvas
@@ -68,26 +69,47 @@ function processImage() {
         let g = data[i + 1];
         let b = data[i + 2];
 
-        // Konversi piksel ke HSL (Hue, Saturation, Lightness)
+        // Konversi ke HSL
         const [h, s, l] = rgbToHsl(r, g, b);
 
-        // DETEKSI KULIT ANIME YANG SANGAT AKURAT:
-        // Kulit waifu umumnya berada di rentang warna Orange-Merah (Hue: 10 - 45)
-        // Memiliki saturasi sedang (S: 15% - 80%) dan sangat cerah (L: > 50%)
-        const isSkin = (h >= 10 && h <= 45) && (s >= 15 && s <= 85) && (l > 50);
+        // DETEKSI KULIT YANG DIPERLUAS (Mendukung efek cahaya biru/ungu/bayangan anime)
+        // 1. Deteksi kulit normal (Orange-Merah hangat)
+        const isWarmSkin = (h >= 0 && h <= 50) && (s >= 10 && s <= 90) && (l > 40);
+        
+        // 2. Deteksi kulit di bawah pencahayaan dingin/biru/ungu (seperti gambar kamu)
+        // Kulit yang terkena tint biru/violet biasanya bergeser ke Hue pink/magenta/indigo (300-355) 
+        // atau memiliki nilai Red dan Blue yang relatif tinggi dan dekat dibanding Green (R > G && B > G)
+        const isCoolSkinTint = (h >= 300 && h <= 360) && (s >= 10 && s <= 80) && (l > 35);
+        
+        // 3. Deteksi kondisi pixel spesifik: Kulit waifu di area teduh biasanya sangat cerah 
+        // namun nilai RGB-nya berdekatan dengan dominasi merah tipis
+        const isBrightSkin = (r > 140 && g > 110 && b > 110) && (r > g) && (Math.abs(g - b) < 40);
 
-        if (isSkin) {
-            // RUMUS MEWARNAI KULIT MENJADI TAN/COKLAT MATANG
-            // Kita turunkan Lightness (kecerahan) agar gelap
-            let newL = l - (factor * 35); 
-            if (newL < 15) newL = 15; // Batas agar tidak hitam pekat gosong
+        // Gabungkan semua kondisi deteksi kulit
+        if (isWarmSkin || isCoolSkinTint || isBrightSkin) {
+            
+            // Jaga agar rambut putih/kebiruan dan latar belakang emas tidak ikut hancur:
+            // Kita filter agar tidak mengenai warna kuning terang latar belakang atau putih rambut murni
+            if (h >= 45 && h <= 70 && l > 70) continue; // Skip background emas/kuning cerah
+            if (s < 12 && l > 75) continue; // Skip rambut putih/abu-abu netral yang terlalu terang
 
-            // Kita naikkan Saturation agar warna coklatnya hidup (eksotis) dan tidak abu-abu
-            let newS = s + (factor * 20);
-            if (newS > 90) newS = 90;
+            // RUMUS MENGUBAH TONE MENJADI TAN/MELANIN
+            // Menurunkan Lightness secara logis agar bayangan gradasi asli anime tidak hilang
+            let newL = l - (factor * 38); 
+            if (newL < 12) newL = 12; 
 
-            // Konversi kembali dari HSL ke RGB untuk dimasukkan ke Canvas
-            const hRad = h / 360;
+            // Naikkan saturasi warna merah-oranye untuk memberikan efek kulit eksotis hangat,
+            // sekaligus mematikan sisa tint biru/ungu pada kulit asli
+            let newH = h;
+            if (h > 300 || h < 10) {
+                newH = 20; // Belokkan rona warna pink/ungu kulit tadi ke arah Orange hangat (20)
+            }
+            
+            let newS = s + (factor * 25);
+            if (newS > 85) newS = 85;
+
+            // Konversi kembali HSL ke RGB
+            const hRad = newH / 360;
             const sRad = newS / 100;
             const lRad = newL / 100;
 
@@ -120,6 +142,8 @@ function processImage() {
 
     // Tampilkan hasil perubahan ke canvas
     ctx.putImageData(imgData, 0, 0);
+                              }
+                
 }
 
 // Jalankan fungsi setiap kali slider digeser
