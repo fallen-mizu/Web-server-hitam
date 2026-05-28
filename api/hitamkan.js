@@ -1,6 +1,7 @@
 import multer from "multer";
 import axios from "axios";
 import FormData from "form-data";
+import sharp from "sharp";
 
 const upload = multer({
     storage: multer.memoryStorage()
@@ -64,13 +65,22 @@ export default async function handler(req, res) {
         const formData =
         new FormData();
 
-        formData.append(
-            "init_image",
-            req.file.buffer,
-            {
-                filename: "image.png"
-            }
-        );
+        const resizedBuffer =
+await sharp(req.file.buffer)
+
+.resize(1024, 1024)
+
+.png()
+
+.toBuffer();
+
+formData.append(
+    "init_image",
+    resizedBuffer,
+    {
+        filename: "image.png"
+    }
+);
 
         formData.append(
             "image_strength",
