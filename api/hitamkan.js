@@ -1,5 +1,6 @@
 import multer from "multer";
-
+const HF_TOKEN =
+process.env.HF_TOKEN;
 const upload = multer({
     storage: multer.memoryStorage()
 });
