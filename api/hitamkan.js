@@ -150,7 +150,7 @@ export default async function handler(req, res) {
         avg / 255;
 
         // blend lebih kuat
-        const blend = 0.55;
+        const blend = 0.7;
 
         data[i] = Math.max(
             0,
