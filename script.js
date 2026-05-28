@@ -3,30 +3,12 @@ const canvas = document.getElementById('outputCanvas');
 const ctx = canvas.getContext('2d');
 const darknessSlider = document.getElementById('darkness');
 const downloadBtn = document.getElementById('downloadBtn');
-const loadingStatus = document.getElementById('loadingStatus');
 
-let bodySegmenter;
-let faceDetector;
 let originalImage = null;
 
-// Initialize AI Models
-async function initAI() {
-    loadingStatus.classList.remove('hidden');
-    
-    // 1. Load Body Segmenter (lebih detail dari selfie segmentation)
-    const bodyModel = bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation; 
-    const bodyConfig = { runtime: 'mediapipe', solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation' };
-    bodySegmenter = await bodySegmentation.createSegmenter(bodyModel, bodyConfig);
-
-    // 2. Load Face Detector
-    const faceModel = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-    const faceConfig = { runtime: 'mediapipe', refineLandmarks: false, solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh' };
-    faceDetector = await faceLandmarksDetection.createDetector(faceModel, faceConfig);
-
-    console.log("AI Models Loaded!");
-    loadingStatus.classList.add('hidden');
-}
-initAI();
+// Sembunyikan status loading karena kita tidak butuh AI luar lagi
+const loadingStatus = document.getElementById('loadingStatus');
+if (loadingStatus) loadingStatus.classList.add('hidden');
 
 // Handle Image Upload
 upload.addEventListener('change', (e) => {
@@ -49,91 +31,104 @@ upload.addEventListener('change', (e) => {
     reader.readAsDataURL(file);
 });
 
-async function processImage() {
-    if (!originalImage || !bodySegmenter || !faceDetector) return;
+// Fungsi Konversi RGB ke HSL untuk seleksi warna kulit yang akurat
+function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
 
-    // 1. Gambar ulang image asli ke canvas
+    if (max === min) {
+        h = s = 0; // achromatic
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    return [h * 360, s * 100, l * 100];
+}
+
+// Fungsi Utama: Mengubah warna kulit waifu secara presisi
+function processImage() {
+    if (!originalImage) return;
+
+    // Gambar ulang gambar asli ke canvas
     ctx.drawImage(originalImage, 0, 0);
     
-    // 2. DAPATKAN MASKER TUBUH (Body Segmentation)
-    const bodySegmentationRes = await bodySegmenter.segmentPeople(canvas);
-    const bodyMask = await bodySegmentation.toBinaryMask(bodySegmentationRes);
-
-    // 3. DAPATKAN MASKER WAJAH (Face Detection)
-    // Untuk wajah, kita perlu membuat masker sendiri berdasarkan bounding box wajah yang dideteksi
-    const faces = await faceDetector.estimateFaces(canvas);
-    
-    // 4. Ambil data piksel canvas
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
-    const bodyMaskData = bodyMask.data; // Nilai 0 (BG) atau 255 (Body)
+    const factor = darknessSlider.value / 100; // Nilai slider 0 - 1
 
-    // Buat canvas sementara untuk masker wajah
-    const faceMaskCanvas = document.createElement('canvas');
-    faceMaskCanvas.width = canvas.width;
-    faceMaskCanvas.height = canvas.height;
-    const faceMaskCtx = faceMaskCanvas.getContext('2d');
-    faceMaskCtx.fillStyle = 'black'; // Default, tidak ada wajah
-    faceMaskCtx.fillRect(0, 0, faceMaskCanvas.width, faceMaskCanvas.height);
-
-    if (faces.length > 0) {
-        faceMaskCtx.fillStyle = 'white'; // Gambar area wajah dengan putih
-        faces.forEach(face => {
-            // Gunakan bounding box wajah untuk membuat masker sederhana
-            const box = face.box;
-            // Sedikit diperkecil/disesuaikan agar tidak mengenai rambut
-            const shrinkFactor = 0.1; 
-            const widthShrink = box.width * shrinkFactor;
-            const heightShrink = box.height * shrinkFactor;
-            
-            faceMaskCtx.beginPath();
-            faceMaskCtx.ellipse(
-                box.x + box.width/2, 
-                box.y + box.height/2, 
-                (box.width - widthShrink)/2, 
-                (box.height - heightShrink)/2, 
-                0, 0, 2*Math.PI
-            );
-            faceMaskCtx.fill();
-        });
-    }
-    
-    const faceMaskData = faceMaskCtx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const factor = darknessSlider.value / 100; // 0 sampai 1
-
-    // 5. LAKUKAN LOOPING PADA SETIAP PIKSEL DENGAN LOGIKA PRESEISI
     for (let i = 0; i < data.length; i += 4) {
-        // Logika Masker:
-        // - Piksel ada di area tubuh (bodyMaskData[i] === 255)
-        // - DAN Piksel BUKAN di area wajah (faceMaskData[i] < 128) -> Kita gunakan threshold 128 karena faceMaskData adalah grayscale
-        
-        const isBody = bodyMaskData[i] === 255;
-        const isNotFace = faceMaskData[i] < 128; // Dianggap bukan wajah jika maskernya gelap
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
 
-        if (isBody && isNotFace) {
-            let r = data[i];
-            let g = data[i + 1];
-            let b = data[i + 2];
+        // Konversi piksel ke HSL (Hue, Saturation, Lightness)
+        const [h, s, l] = rgbToHsl(r, g, b);
 
-            // Terapkan efek kegelapan hanya pada area ini
-            // Gunakan rumus yang lebih halus agar tidak merusak baju secara total jika terdeteksi
-            data[i]     = r * (1 - factor * 0.4); // Menggelapkan merah
-            data[i + 1] = g * (1 - factor * 0.5); // Menggelapkan hijau lebih banyak
-            data[i + 2] = b * (1 - factor * 0.6); // Menggelapkan biru paling banyak
+        // DETEKSI KULIT ANIME YANG SANGAT AKURAT:
+        // Kulit waifu umumnya berada di rentang warna Orange-Merah (Hue: 10 - 45)
+        // Memiliki saturasi sedang (S: 15% - 80%) dan sangat cerah (L: > 50%)
+        const isSkin = (h >= 10 && h <= 45) && (s >= 15 && s <= 85) && (l > 50);
+
+        if (isSkin) {
+            // RUMUS MEWARNAI KULIT MENJADI TAN/COKLAT MATANG
+            // Kita turunkan Lightness (kecerahan) agar gelap
+            let newL = l - (factor * 35); 
+            if (newL < 15) newL = 15; // Batas agar tidak hitam pekat gosong
+
+            // Kita naikkan Saturation agar warna coklatnya hidup (eksotis) dan tidak abu-abu
+            let newS = s + (factor * 20);
+            if (newS > 90) newS = 90;
+
+            // Konversi kembali dari HSL ke RGB untuk dimasukkan ke Canvas
+            const hRad = h / 360;
+            const sRad = newS / 100;
+            const lRad = newL / 100;
+
+            let rTemp, gTemp, bTemp;
+            if (sRad === 0) {
+                rTemp = gTemp = bTemp = lRad;
+            } else {
+                const q = lRad < 0.5 ? lRad * (1 + sRad) : lRad + sRad - lRad * sRad;
+                const p = 2 * lRad - q;
+                
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1/6) return p + (q - p) * 6 * t;
+                    if (t < 1/2) return q;
+                    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                    return p;
+                };
+
+                rTemp = hue2rgb(p, q, hRad + 1/3);
+                gTemp = hue2rgb(p, q, hRad);
+                bTemp = hue2rgb(p, q, hRad - 1/3);
+            }
+
+            data[i]     = Math.round(rTemp * 255);
+            data[i + 1] = Math.round(gTemp * 255);
+            data[i + 2] = Math.round(bTemp * 255);
         }
     }
 
-    // 6. Masukkan kembali data piksel yang sudah diubah ke canvas
+    // Tampilkan hasil perubahan ke canvas
     ctx.putImageData(imgData, 0, 0);
 }
 
-// Update otomatis saat slider digeser
+// Jalankan fungsi setiap kali slider digeser
 darknessSlider.addEventListener('input', processImage);
 
 // Download Handler
 downloadBtn.addEventListener('click', () => {
     const link = document.createElement('a');
-    link.download = 'waifu-melanin-accurate.png';
+    link.download = 'waifu-tan-presisi.png';
     link.href = canvas.toDataURL();
     link.click();
 });
