@@ -24,7 +24,9 @@ imageInput.addEventListener(
     previewImg.src =
     URL.createObjectURL(selectedFile);
 
-    previewImg.classList.add("show");
+    previewImg.classList.add(
+        "show"
+    );
 });
 
 hitamkanBtn.addEventListener(
@@ -33,10 +35,15 @@ hitamkanBtn.addEventListener(
 
     if(!selectedFile){
 
-        alert("Upload gambar dulu");
+        alert(
+        "Upload gambar dulu"
+        );
 
         return;
     }
+
+    hitamkanBtn.innerText =
+    "Processing...";
 
     const img =
     new Image();
@@ -47,7 +54,9 @@ hitamkanBtn.addEventListener(
     img.onload = ()=>{
 
         const canvas =
-        document.createElement("canvas");
+        document.createElement(
+            "canvas"
+        );
 
         const ctx =
         canvas.getContext(
@@ -86,9 +95,9 @@ hitamkanBtn.addEventListener(
         const height =
         canvas.height;
 
-        // =================================================
-        // AUTO PICK CENTER FACE COLOR
-        // =================================================
+        // =========================================
+        // AUTO SKIN SAMPLE
+        // =========================================
 
         const centerX =
         Math.floor(width / 2);
@@ -96,22 +105,20 @@ hitamkanBtn.addEventListener(
         const centerY =
         Math.floor(height / 3);
 
-        const sampleSize = 20;
-
-        let totalR = 0;
-        let totalG = 0;
-        let totalB = 0;
-        let count = 0;
+        let sampleR = 0;
+        let sampleG = 0;
+        let sampleB = 0;
+        let sampleCount = 0;
 
         for(
-            let y = centerY - sampleSize;
-            y < centerY + sampleSize;
+            let y = centerY - 25;
+            y < centerY + 25;
             y++
         ){
 
             for(
-                let x = centerX - sampleSize;
-                x < centerX + sampleSize;
+                let x = centerX - 25;
+                x < centerX + 25;
                 x++
             ){
 
@@ -125,24 +132,41 @@ hitamkanBtn.addEventListener(
                 const i =
                 (y * width + x) * 4;
 
-                totalR += data[i];
-                totalG += data[i+1];
-                totalB += data[i+2];
+                const r = data[i];
+                const g = data[i+1];
+                const b = data[i+2];
 
-                count++;
+                // skip oversaturated anime hair
+                const max =
+                Math.max(r,g,b);
+
+                const min =
+                Math.min(r,g,b);
+
+                const sat =
+                (max-min)/(max||1);
+
+                if(sat > 0.45)
+                continue;
+
+                sampleR += r;
+                sampleG += g;
+                sampleB += b;
+
+                sampleCount++;
             }
         }
 
         const baseSkin = {
 
-            r: totalR / count,
-            g: totalG / count,
-            b: totalB / count
+            r: sampleR / sampleCount,
+            g: sampleG / sampleCount,
+            b: sampleB / sampleCount
         };
 
-        // =================================================
-        // BUILD SMOOTH MASK
-        // =================================================
+        // =========================================
+        // BUILD MASK
+        // =========================================
 
         const mask =
         new Float32Array(
@@ -171,53 +195,78 @@ hitamkanBtn.addEventListener(
                 const g = data[i+1];
                 const b = data[i+2];
 
+                const max =
+                Math.max(r,g,b);
+
+                const min =
+                Math.min(r,g,b);
+
+                const saturation =
+                (max-min)/(max||1);
+
+                // exclude vivid anime hair
+                if(
+                    saturation > 0.48
+                ){
+                    continue;
+                }
+
+                // exclude strong yellow/orange
+                if(
+                    r > 160 &&
+                    g > 120 &&
+                    b < 120
+                ){
+                    continue;
+                }
+
+                // exclude dark regions
+                const brightness =
+                (r+g+b)/3;
+
+                if(brightness < 45)
+                continue;
+
                 // color distance
                 const dist =
                 Math.sqrt(
 
-                    (r - baseSkin.r) ** 2 +
+                    (r-baseSkin.r)**2 +
 
-                    (g - baseSkin.g) ** 2 +
+                    (g-baseSkin.g)**2 +
 
-                    (b - baseSkin.b) ** 2
+                    (b-baseSkin.b)**2
                 );
 
-                // adaptive threshold
-                let alpha = 0;
+                if(dist < 75){
 
-                if(dist < 95){
+                    let alpha =
+                    1 - (dist / 75);
 
-                    alpha =
-                    1 - (dist / 95);
+                    // center bias
+                    const cx =
+                    Math.abs(
+                        x - width/2
+                    ) / (width/2);
+
+                    alpha *=
+                    (1 - cx * 0.3);
+
+                    mask[index] = alpha;
                 }
-
-                // face/body area bias
-                const faceBias =
-                Math.max(
-                    0,
-                    1 - (
-                        Math.abs(
-                            x - width/2
-                        ) / (width/2)
-                    )
-                );
-
-                alpha *= faceBias;
-
-                mask[index] = alpha;
             }
         }
 
-        // =================================================
+        // =========================================
         // FEATHER SMOOTH
-        // =================================================
+        // =========================================
 
         const smooth =
         new Float32Array(
             width * height
         );
 
-        const radius = 3;
+        const radius = 4;
 
         for(
             let y = 0;
@@ -272,16 +321,9 @@ hitamkanBtn.addEventListener(
             }
         }
 
-        // =================================================
+        // =========================================
         // APPLY DARK BROWN
-        // =================================================
-
-        const target = {
-
-            r: 92,
-            g: 58,
-            b: 38
-        };
+        // =========================================
 
         for(
             let y = 0;
@@ -304,55 +346,60 @@ hitamkanBtn.addEventListener(
                 const alpha =
                 smooth[index];
 
-                if(alpha > 0.03){
+                if(alpha > 0.02){
 
                     const r = data[i];
                     const g = data[i+1];
                     const b = data[i+2];
 
-                    // preserve shading
-                    const brightness =
-                    (r+g+b)/3 / 255;
+                    // luminance only
+                    const luminance =
+
+                    (
+                        0.299 * r +
+                        0.587 * g +
+                        0.114 * b
+                    ) / 255;
 
                     const strength =
-                    alpha * 0.72;
+                    alpha * 0.82;
+
+                    const darkR =
+                    92 * luminance;
+
+                    const darkG =
+                    58 * luminance;
+
+                    const darkB =
+                    38 * luminance;
 
                     data[i] = Math.round(
 
                         r * (1-strength) +
 
-                        (
-                            target.r *
-                            brightness
-                        ) * strength
+                        darkR * strength
                     );
 
                     data[i+1] = Math.round(
 
                         g * (1-strength) +
 
-                        (
-                            target.g *
-                            brightness
-                        ) * strength
+                        darkG * strength
                     );
 
                     data[i+2] = Math.round(
 
                         b * (1-strength) +
 
-                        (
-                            target.b *
-                            brightness
-                        ) * strength
+                        darkB * strength
                     );
                 }
             }
         }
 
-        // =================================================
-        // RENDER FINAL
-        // =================================================
+        // =========================================
+        // RENDER
+        // =========================================
 
         ctx.putImageData(
             imageData,
@@ -365,6 +412,11 @@ hitamkanBtn.addEventListener(
             "image/png"
         );
 
-        resultImg.classList.add("show");
+        resultImg.classList.add(
+            "show"
+        );
+
+        hitamkanBtn.innerText =
+        "Hitamkan";
     };
 });
