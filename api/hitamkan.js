@@ -26,52 +26,6 @@ export const config = {
     }
 };
 
-function rgbToHsv(r, g, b) {
-
-    r /= 255;
-    g /= 255;
-    b /= 255;
-
-    let max = Math.max(r, g, b);
-    let min = Math.min(r, g, b);
-
-    let h, s, v = max;
-
-    let d = max - min;
-
-    s = max === 0 ? 0 : d / max;
-
-    if (max === min) {
-
-        h = 0;
-
-    } else {
-
-        switch (max) {
-
-            case r:
-                h = (g - b) / d + (g < b ? 6 : 0);
-                break;
-
-            case g:
-                h = (b - r) / d + 2;
-                break;
-
-            case b:
-                h = (r - g) / d + 4;
-                break;
-        }
-
-        h /= 6;
-    }
-
-    return {
-        h: h * 360,
-        s,
-        v
-    };
-}
-
 export default async function handler(req, res) {
 
     if (req.method !== "POST") {
@@ -96,6 +50,7 @@ export default async function handler(req, res) {
             });
         }
 
+        // decode image
         const image =
         sharp(req.file.buffer);
 
@@ -108,105 +63,141 @@ export default async function handler(req, res) {
             resolveWithObject: true
         });
 
+        // skin mask
+        const mask =
+        Buffer.alloc(data.length);
+
         for (
-    let i = 0;
-    i < data.length;
-    i += info.channels
-) {
+            let i = 0;
+            i < data.length;
+            i += info.channels
+        ) {
 
-    let r = data[i];
-    let g = data[i + 1];
-    let b = data[i + 2];
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
 
-    // brightness
-    const avg =
-    (r + g + b) / 3;
+            const max =
+            Math.max(r, g, b);
 
-    // anime skin detect lebih luas
-    const isSkin = (
+            const min =
+            Math.min(r, g, b);
 
-        r > 40 &&
-        g > 25 &&
-        b > 20 &&
+            const diff =
+            max - min;
 
-        r >= g &&
-        r >= b &&
+            const avg =
+            (r + g + b) / 3;
 
-        avg > 45 &&
+            // anime skin detection
+            const isSkin = (
 
-        Math.abs(r - g) < 80 &&
-        Math.abs(r - b) < 120
-    );
+                r > 45 &&
+                g > 28 &&
+                b > 20 &&
 
-    if (isSkin) {
-        for (
-    let i = 0;
-    i < data.length;
-    i += info.channels
-) {
+                r >= g &&
+                r >= b &&
 
-    data[i] =
-    Math.min(255, data[i] * 0.98);
+                diff > 8 &&
+                diff < 120 &&
 
-    data[i + 1] =
-    Math.min(255, data[i + 1] * 0.98);
+                avg > 55
+            );
 
-    data[i + 2] =
-    Math.min(255, data[i + 2] * 0.98);
+            const alpha =
+            isSkin ? 255 : 0;
+
+            mask[i] = alpha;
+            mask[i + 1] = alpha;
+            mask[i + 2] = alpha;
+
+            if (info.channels === 4) {
+                mask[i + 3] = 255;
+            }
         }
 
+        // feather blur mask
+        const featherMask =
+        await sharp(mask, {
+
+            raw: {
+                width: info.width,
+                height: info.height,
+                channels: info.channels
+            }
+
+        })
+
+        .blur(10)
+
+        .raw()
+
+        .toBuffer();
+
         // dark brown target
-        const targetR = 92;
-        const targetG = 58;
-        const targetB = 38;
+        const target = {
+            r: 92,
+            g: 58,
+            b: 38
+        };
 
-        // preserve shading
-        const shade =
-        avg / 255;
+        // blend smooth
+        for (
+            let i = 0;
+            i < data.length;
+            i += info.channels
+        ) {
 
-        // blend lebih kuat
-        const blend = 0.7;
+            const alpha =
+            featherMask[i] / 255;
 
-        data[i] = Math.max(
-            0,
+            if (alpha > 0.01) {
 
-            Math.min(
-                255,
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
 
-                Math.round(
-                    r * (1 - blend) +
-                    targetR * blend * shade
-                )
-            )
-        );
+                // preserve anime shading
+                const brightness =
+                (r + g + b) / 3 / 255;
 
-        data[i + 1] = Math.max(
-            0,
+                const strength =
+                alpha * 0.72;
 
-            Math.min(
-                255,
+                data[i] = Math.round(
 
-                Math.round(
-                    g * (1 - blend) +
-                    targetG * blend * shade
-                )
-            )
-        );
+                    r * (1 - strength) +
 
-        data[i + 2] = Math.max(
-            0,
+                    (
+                        target.r *
+                        brightness
+                    ) * strength
+                );
 
-            Math.min(
-                255,
+                data[i + 1] = Math.round(
 
-                Math.round(
-                    b * (1 - blend) +
-                    targetB * blend * shade
-                )
-            )
-        );
-    }
-    }
+                    g * (1 - strength) +
+
+                    (
+                        target.g *
+                        brightness
+                    ) * strength
+                );
+
+                data[i + 2] = Math.round(
+
+                    b * (1 - strength) +
+
+                    (
+                        target.b *
+                        brightness
+                    ) * strength
+                );
+            }
+        }
+
+        // rebuild image clean
         const output =
         await sharp(data, {
 
@@ -217,9 +208,6 @@ export default async function handler(req, res) {
             }
 
         })
-
-        // smoothing agar tidak bercak
-        .median(1)
 
         .png({
             quality: 100,
