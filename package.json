@@ -1,10 +1,8 @@
 {
-  "name": "ai-hitamkan-web",
+  "name": "ai-hitamkan",
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "axios": "^1.7.2",
-    "formidable": "^3.5.1",
-    "fs-extra": "^11.2.0"
+    "multer": "^1.4.5-lts.1"
   }
 }
