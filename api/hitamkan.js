@@ -74,8 +74,7 @@ export default async function handler(req, res) {
             },
             {
                 headers: {
-                    Authorization: "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"
-                },
+                    Authorization: `Bearer ${process.env.HF_TOKEN}`
                 responseType: "arraybuffer"
             }
         );
