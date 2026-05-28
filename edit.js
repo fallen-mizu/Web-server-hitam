@@ -12,20 +12,22 @@ document.getElementById("hitamkanBtn");
 
 let selectedFile;
 
-// load BodyPix
-async function loadModel(){
+// MEDIAPIPE
+const faceDetection =
+new FaceDetection({
 
-    return await bodyPix.load({
+    locateFile: (file)=>{
 
-        architecture: "MobileNetV1",
-        outputStride: 16,
-        multiplier: 0.75,
-        quantBytes: 2
-    });
-}
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`;
+    }
+});
 
-let netPromise =
-loadModel();
+faceDetection.setOptions({
+
+    model: "short",
+
+    minDetectionConfidence: 0.3
+});
 
 imageInput.addEventListener(
 "change",
@@ -93,20 +95,6 @@ async ()=>{
             0
         );
 
-        // BODYPIX MODEL
-        const net =
-        await netPromise;
-
-        // segment person
-        const segmentation =
-        await net.segmentPerson(
-            img,
-            {
-                internalResolution:"medium",
-                segmentationThreshold:0.7
-            }
-        );
-
         const imageData =
         ctx.getImageData(
             0,
@@ -118,58 +106,150 @@ async ()=>{
         const data =
         imageData.data;
 
-        // dark brown target
-        const target = {
-            r:92,
-            g:58,
-            b:38
-        };
+        // detect face
+        let faceBox = null;
 
-        // helper
-        function isSkinLike(r,g,b){
+        faceDetection.onResults(
+        (results)=>{
 
-            return (
+            if(
+                results.detections &&
+                results.detections.length > 0
+            ){
 
-                r > 35 &&
-                g > 20 &&
-                b > 15 &&
+                const box =
+                results
+                .detections[0]
+                .boundingBox;
 
-                r >= g &&
-                r >= b &&
+                faceBox = box;
+            }
+        });
 
-                Math.abs(r-g) > 5
-            );
+        await faceDetection.send({
+            image: img
+        });
+
+        // fallback jika anime tidak terdeteksi
+        if(!faceBox){
+
+            faceBox = {
+
+                xmin: 0.2,
+                ymin: 0.15,
+
+                width: 0.6,
+                height: 0.7
+            };
         }
 
-        // APPLY ONLY PERSON AREA
+        const fx =
+        faceBox.xmin *
+        canvas.width;
+
+        const fy =
+        faceBox.ymin *
+        canvas.height;
+
+        const fw =
+        faceBox.width *
+        canvas.width;
+
+        const fh =
+        faceBox.height *
+        canvas.height;
+
+        // dark brown
+        const target = {
+
+            r: 92,
+            g: 58,
+            b: 38
+        };
+
+        // process pixel
         for(
-            let i = 0;
-            i < segmentation.data.length;
-            i++
+            let y = 0;
+            y < canvas.height;
+            y++
         ){
 
-            if(segmentation.data[i] === 1){
+            for(
+                let x = 0;
+                x < canvas.width;
+                x++
+            ){
 
-                const idx =
-                i * 4;
+                const index =
+                (y * canvas.width + x);
 
-                const r = data[idx];
-                const g = data[idx+1];
-                const b = data[idx+2];
+                const i =
+                index * 4;
 
-                // extra skin filter
-                if(
-                    isSkinLike(r,g,b)
-                ){
+                const r = data[i];
+                const g = data[i+1];
+                const b = data[i+2];
+
+                // area wajah/tubuh
+                const insideFace = (
+
+                    x > fx - fw*0.3 &&
+                    x < fx + fw*1.3 &&
+
+                    y > fy - fh*0.15 &&
+                    y < fy + fh*1.6
+                );
+
+                if(!insideFace)
+                continue;
+
+                // anime skin detect
+                const isSkin = (
+
+                    r > 40 &&
+                    g > 20 &&
+                    b > 15 &&
+
+                    r >= g &&
+                    r >= b &&
+
+                    Math.abs(r-g) > 4
+                );
+
+                if(isSkin){
+
+                    // feather edge
+                    const cx =
+                    fx + fw/2;
+
+                    const cy =
+                    fy + fh/2;
+
+                    const dx =
+                    (x-cx)/(fw*0.9);
+
+                    const dy =
+                    (y-cy)/(fh*1.2);
+
+                    const dist =
+                    Math.sqrt(
+                        dx*dx + dy*dy
+                    );
+
+                    const falloff =
+                    Math.max(
+                        0,
+                        1 - dist
+                    );
 
                     // preserve shading
                     const brightness =
                     (r+g+b)/3 / 255;
 
                     const strength =
-                    0.48;
+                    0.58 * falloff;
 
-                    data[idx] = Math.round(
+                    data[i] = Math.round(
 
                         r * (1-strength) +
 
@@ -179,7 +259,7 @@ async ()=>{
                         ) * strength
                     );
 
-                    data[idx+1] = Math.round(
+                    data[i+1] = Math.round(
 
                         g * (1-strength) +
 
@@ -189,7 +269,7 @@ async ()=>{
                         ) * strength
                     );
 
-                    data[idx+2] = Math.round(
+                    data[i+2] = Math.round(
 
                         b * (1-strength) +
 
@@ -202,7 +282,6 @@ async ()=>{
             }
         }
 
-        // render final
         ctx.putImageData(
             imageData,
             0,
