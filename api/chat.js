@@ -1,5 +1,6 @@
 import { Groq } from "groq-sdk";
 
+// Inisialisasi Groq dengan API Key dari environment variable
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 async function getRequestBody(req) {
@@ -15,6 +16,7 @@ async function getRequestBody(req) {
 }
 
 export default async function handler(req, res) {
+    // Set header CORS agar tidak diblokir browser ponsel
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -30,16 +32,16 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Data gambar kosong.' });
         }
 
-        // MENYURUH AI MENCARI TITIK PUSAT WAJAH SAJA (SANGAT AKURAT)
+        // MENGGUNAKAN MODEL VISION RESMI GROQ: llama3-vision-8b-instant
         const response = await groq.chat.completions.create({
-            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            model: "llama3-vision-8b-instant",
             messages: [
                 {
                     role: "user",
                     content: [
                         {
                             type: "text",
-                            text: "Locate one single coordinate point [y, x] that lands exactly on the center of the anime character's facial skin (like the nose or center of the cheek). Scale the coordinates from 0 to 100 based on the image size. Return a JSON object with a single key 'center' containing this point. Example format: {\"center\": [35, 52]}. Output ONLY raw JSON."
+                            text: "Locate the continuous bounding box area of the anime character's visible facial skin and neck skin. Return a JSON object with a single key 'box' containing the coordinates [ymin, xmin, ymax, xmax] scaled from 0 to 100. Example format: {\"box\": [20, 35, 65, 70]}. Output ONLY raw valid JSON, no markdown, no explanation."
                         },
                         {
                             type: "image_url",
@@ -56,7 +58,7 @@ export default async function handler(req, res) {
         return res.status(200).json(JSON.parse(resultText));
 
     } catch (error) {
-        console.error("Error backend:", error);
-        return res.status(500).json({ error: 'Groq gagal memproses', message: error.message });
+        console.error("Error pada Groq Vision Backend:", error);
+        return res.status(500).json({ error: 'Groq Vision gagal memproses gambar', message: error.message });
     }
 }
