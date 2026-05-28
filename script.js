@@ -3,11 +3,13 @@ const canvas = document.getElementById('outputCanvas');
 const ctx = canvas.getContext('2d');
 const tanBtn = document.getElementById('tanBtn');
 const downloadBtn = document.getElementById('downloadBtn');
+const loadingStatus = document.getElementById('loadingStatus');
+const loadingText = document.getElementById('loadingText');
 
 let originalImage = null;
 let activeBox = null; 
 
-// 1. Handler Event Proses Upload Gambar
+// 1. Jalankan upload gambar
 upload.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -21,7 +23,7 @@ upload.addEventListener('change', (e) => {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
             
-            // Kompresi otomatis biar aman dari payload limit Vercel (4.5MB)
+            // Kompresi otomatis bypass Vercel payload limit (4.5MB)
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             let maxDim = 800;
@@ -43,10 +45,14 @@ upload.addEventListener('change', (e) => {
             
             const compressedBase64 = tempCanvas.toDataURL('image/jpeg', 0.75);
 
-            alert("Menghubungi Groq AI Vision untuk memindai struktur gambar...");
+            // Munculkan animasi loading Tailwind di atas canvas
+            loadingStatus.classList.remove('hidden');
+            loadingText.innerText = "Groq AI Vision sedang memindai wajah...";
+            
             await hubungiGroqVision(compressedBase64);
             
-            // Tampilkan tombol eksekusi setelah koordinat terkunci
+            // Sembunyikan loading, munculkan tombol kontrol instan
+            loadingStatus.classList.add('hidden');
             tanBtn.classList.remove('hidden');
             downloadBtn.classList.remove('hidden');
         };
@@ -55,7 +61,7 @@ upload.addEventListener('change', (e) => {
     reader.readAsDataURL(file);
 });
 
-// 2. Fungsi Mengambil Koordinat dari Groq AI Vision
+// 2. Hubungi backend Groq Vision resmi
 async function hubungiGroqVision(base64Image) {
     try {
         const response = await fetch('/api/chat', {
@@ -71,43 +77,35 @@ async function hubungiGroqVision(base64Image) {
 
         if (data && data.box) {
             activeBox = data.box;
-            alert("Groq AI Vision sukses mengunci area kulit wajah!");
         } else {
             activeBox = data.boxes ? data.boxes[0] : [10, 25, 80, 75];
-            alert("Sistem Vision aktif menggunakan kalibrasi otomatis.");
         }
     } catch (error) {
         console.error(error);
-        activeBox = [10, 25, 80, 75]; 
-        alert("Menggunakan mode pemindaian cerdas fallback.");
+        activeBox = [10, 25, 80, 75]; // Fallback area wajah standar
     }
 }
 
-// 3. Eksekusi Tanning Instan Sekali Klik (Anti-Macet)
+// 3. Fungsi Eksekusi Tanning Sekali Klik
 function triggerTanning() {
-    if (!originalImage || !activeBox) {
-        alert("Silakan upload gambar terlebih dahulu.");
-        return;
-    }
+    if (!originalImage || !activeBox) return;
 
-    // Pastikan gambar di-reset ke kondisi asli sebelum diwarnai coklat
+    // Kembalikan ke kondisi asli sebelum pewarnaan biar tidak menumpuk
     ctx.drawImage(originalImage, 0, 0);
 
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
     
-    // Kita kunci nilai intensitas kegelapan di angka 0.72 (Efek Tanned Matang Eksotis yang Pas)
+    // Nilai kegelapan dikunci di angka 0.72 (Hasil Tan Coklat Matang Eksotis Terbaik)
     const factor = 0.72; 
 
-    // Konversi koordinat persen Groq ke ukuran pixel canvas riil
+    // Konversi koordinat persen Groq ke pixel canvas riil
     const ymin = Math.max(0, Math.floor((activeBox[0] / 100) * canvas.height));
     const xmin = Math.max(0, Math.floor((activeBox[1] / 100) * canvas.width));
     const ymax = Math.min(canvas.height, Math.floor((activeBox[2] / 100) * canvas.height));
     const xmax = Math.min(canvas.width, Math.floor((activeBox[3] / 100) * canvas.width));
 
-    console.log(`Mengeksekusi pemindaian piksel pada area kotak: Y[${ymin}-${ymax}] X[${xmin}-${xmax}]`);
-
-    // Jalankan manipulasi piksel langsung di area wajah
+    // Lakukan pemindaian piksel secara selektif HANYA di area kotak wajah waifu
     for (let y = ymin; y < ymax; y++) {
         for (let x = xmin; x < xmax; x++) {
             const i = (y * canvas.width + x) * 4;
@@ -116,17 +114,16 @@ function triggerTanning() {
             let g = data[i + 1];
             let b = data[i + 2];
 
-            // Filter Spektrum Rona Kulit Anime dengan Toleransi Cahaya Biru/Ungu
+            // Filter rona kulit anime dengan toleransi lighting ungu/biru
             const isSkinTone = (r > g - 15) && (r > b - 25) && ((r + g + b) / 3 > 30);
 
-            // Proteksi garis komik / outline hitam agar tidak pudar
+            // Amankan outline hitam garis gambar
             const isNotDarkOutline = !(r < 35 && g < 35 && b < 35);
 
-            // Proteksi rambut putih/abu-abu Arisu agar tidak ikut kecoklatan
+            // Amankan rambut putih Arisu
             const isNotWhiteHair = Math.abs(r - g) > 6 || Math.abs(r - b) > 6;
 
             if (isSkinTone && isNotDarkOutline && isNotWhiteHair) {
-                // Formula Blending Multiplier Warna Coklat Eksotis
                 const targetR = 0.75; 
                 const targetG = 0.52; 
                 const targetB = 0.35; 
@@ -138,19 +135,17 @@ function triggerTanning() {
         }
     }
 
-    // Paksa canvas melakukan render ulang data piksel baru
+    // Terapkan data warna baru ke layar canvas
     ctx.putImageData(imgData, 0, 0);
-    alert("Proses menghitamkan kulit waifu selesai!");
 }
 
-// 4. Hubungkan Fungsi ke Tombol Utama Baru
+// Event listener tombol instan
 tanBtn.addEventListener('click', triggerTanning);
 
-// 5. Handler Unduh Gambar Hasil Akhir
+// Event listener download gambar
 downloadBtn.addEventListener('click', () => {
     const link = document.createElement('a');
     link.download = 'waifu_instant_tanned.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
 });
-                
