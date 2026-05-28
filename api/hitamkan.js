@@ -62,86 +62,93 @@ export default async function handler(req, res) {
             });
         }
 
+        // resize agar support SDXL
+        const resizedBuffer =
+        await sharp(req.file.buffer)
+
+        .resize(1024, 1024)
+
+        .png()
+
+        .toBuffer();
+
         const formData =
         new FormData();
 
-        const resizedBuffer =
-await sharp(req.file.buffer)
-
-.resize(1024, 1024)
-
-.png()
-
-.toBuffer();
-
-formData.append(
-    "init_image",
-    resizedBuffer,
-    {
-        filename: "image.png"
-    }
-);
-
         formData.append(
-            "image_strength",
-            ""0.2""
+            "image",
+            resizedBuffer,
+            {
+                filename: "image.png"
+            }
         );
 
         formData.append(
-            "text_prompts[0][text]",
-            "dark brown skin tone, preserve face, preserve clothes, preserve background, just change the skin color"
+            "prompt",
+            `
+            darker brown skin tone,
+            realistic human skin,
+            preserve original face,
+            preserve clothes,
+            preserve background,
+            preserve hairstyle,
+            same person,
+            only skin color changes
+            `
+        );
+
+        formData.append(
+            "search_prompt",
+            "skin"
         );
 
         const response =
         await axios.post(
 
-        "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image",
+        "https://api.stability.ai/v2beta/stable-image/edit/search-and-replace",
 
         formData,
 
         {
             headers: {
-                ...formData.getHeaders(),
-
                 Authorization:
                 `Bearer ${API_KEY}`,
 
                 Accept:
-                "application/json"
-            }
+                "image/*",
+
+                ...formData.getHeaders()
+            },
+
+            responseType:
+            "arraybuffer"
         });
 
-        const image =
-        response.data
-        .artifacts?.[0]?.base64;
-
-        if (!image) {
-
-            return res.status(500).json({
-                error: "No image generated"
-            });
-        }
+        const base64 =
+        Buffer
+        .from(response.data)
+        .toString("base64");
 
         return res.status(200).json({
 
             image:
-            `data:image/png;base64,${image}`
+            `data:image/png;base64,${base64}`
 
         });
 
     } catch (err) {
 
         console.log(
-            err.response?.data ||
+            err.response?.data?.toString() ||
             err.message
         );
 
         return res.status(500).json({
 
             error:
-            err.response?.data?.message ||
+            err.response?.data?.toString() ||
             err.message
 
         });
     }
-}
+                }
