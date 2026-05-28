@@ -23,10 +23,10 @@ upload.addEventListener('change', (e) => {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
             
-            // Kompresi otomatis bypass Vercel payload limit (4.5MB)
+            // Kompresi resolusi tinggi dengan menjaga kualitas agar noise rambut hilang
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
-            let maxDim = 800;
+            let maxDim = 1024; // Diperbesar ke 1024 agar deteksi mata Groq lebih halus
             let width = img.width;
             let height = img.height;
             
@@ -43,16 +43,16 @@ upload.addEventListener('change', (e) => {
             tempCanvas.height = height;
             tempCtx.drawImage(img, 0, 0, width, height);
             
-            const compressedBase64 = tempCanvas.toDataURL('image/jpeg', 0.75);
+            const compressedBase64 = tempCanvas.toDataURL('image/jpeg', 0.85);
 
-            // Munculkan animasi loading Tailwind di atas canvas
-            loadingStatus.classList.remove('hidden');
-            loadingText.innerText = "Groq AI Vision sedang memindai wajah...";
+            if(loadingStatus) {
+                loadingStatus.classList.remove('hidden');
+                loadingText.innerText = "Groq AI Vision sedang mengunci koordinat wajah...";
+            }
             
             await hubungiGroqVision(compressedBase64);
             
-            // Sembunyikan loading, munculkan tombol kontrol instan
-            loadingStatus.classList.add('hidden');
+            if(loadingStatus) loadingStatus.classList.add('hidden');
             tanBtn.classList.remove('hidden');
             downloadBtn.classList.remove('hidden');
         };
@@ -64,7 +64,6 @@ upload.addEventListener('change', (e) => {
 // 2. Hubungi backend Groq Vision resmi di Cloudflare Workers
 async function hubungiGroqVision(base64Image) {
     try {
-        // Menggunakan window.location.origin agar otomatis menembak domain Worker kamu yang aktif
         const response = await fetch(`${window.location.origin}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -79,35 +78,35 @@ async function hubungiGroqVision(base64Image) {
         if (data && data.box) {
             activeBox = data.box;
         } else {
-            activeBox = data.boxes ? data.boxes[0] : [10, 25, 80, 75];
+            activeBox = data.boxes ? data.boxes[0] : [5, 15, 90, 85];
         }
     } catch (error) {
         console.error("Gagal menghubungi backend Worker:", error);
-        activeBox = [10, 25, 80, 75]; // Fallback area wajah standar jika offline
+        activeBox = [5, 15, 90, 85]; 
     }
 }
 
-
-// 3. Fungsi Eksekusi Tanning Sekali Klik
+// 3. Fungsi Eksekusi Tanning Sekali Klik dengan Algoritma Soft Edge Blending
 function triggerTanning() {
     if (!originalImage || !activeBox) return;
 
-    // Kembalikan ke kondisi asli sebelum pewarnaan biar tidak menumpuk
+    // Reset ke kondisi awal gambar murni
     ctx.drawImage(originalImage, 0, 0);
 
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
     
-    // Nilai kegelapan dikunci di angka 0.72 (Hasil Tan Coklat Matang Eksotis Terbaik)
-    const factor = 0.72; 
+    // Faktor kegelapan dioptimalkan ke 0.68 agar gradasi bayangan menyatu alami
+    const maxFactor = 0.68; 
 
-    // Konversi koordinat persen Groq ke pixel canvas riil
     const ymin = Math.max(0, Math.floor((activeBox[0] / 100) * canvas.height));
     const xmin = Math.max(0, Math.floor((activeBox[1] / 100) * canvas.width));
     const ymax = Math.min(canvas.height, Math.floor((activeBox[2] / 100) * canvas.height));
     const xmax = Math.min(canvas.width, Math.floor((activeBox[3] / 100) * canvas.width));
 
-    // Lakukan pemindaian piksel secara selektif HANYA di area kotak wajah waifu
+    // Ukuran border luar untuk transisi pemudaran efek (mencegah garis lurus kaku)
+    const feather = 15; 
+
     for (let y = ymin; y < ymax; y++) {
         for (let x = xmin; x < xmax; x++) {
             const i = (y * canvas.width + x) * 4;
@@ -116,19 +115,31 @@ function triggerTanning() {
             let g = data[i + 1];
             let b = data[i + 2];
 
-            // Filter rona kulit anime dengan toleransi lighting ungu/biru
-            const isSkinTone = (r > g - 15) && (r > b - 25) && ((r + g + b) / 3 > 30);
+            // 1. FILTER SPEKTRUM KULIT ANIME (DIPERKETAT AGAR RAMBUT PUTIH / BG TIDAK TEMBUS)
+            const isSkinTone = (r > g) && (g > b || Math.abs(g - b) < 20) && (r > 40);
 
-            // Amankan outline hitam garis gambar
-            const isNotDarkOutline = !(r < 35 && g < 35 && b < 35);
+            // 2. PROTEKSI RAMBUT PUTIH/ABU ARISU (Nilai RGB sangat berdekatan)
+            const isWhiteOrGrayHair = Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && (r > 120);
 
-            // Amankan rambut putih Arisu
-            const isNotWhiteHair = Math.abs(r - g) > 6 || Math.abs(r - b) > 6;
+            // 3. PROTEKSI OUTLINE DAN AREA GELAP
+            const isOutline = r < 40 && g < 40 && b < 40;
 
-            if (isSkinTone && isNotDarkOutline && isNotWhiteHair) {
-                const targetR = 0.75; 
-                const targetG = 0.52; 
-                const targetB = 0.35; 
+            if (isSkinTone && !isWhiteOrGrayHair && !isOutline) {
+                
+                // HITUNG FEATHERING (Mencegah efek patah kotak di tepi deteksi)
+                let distY = Math.min(y - ymin, ymax - y);
+                let distX = Math.min(x - xmin, xmax - x);
+                let minDist = Math.min(distX, distY);
+                
+                let factor = maxFactor;
+                if (minDist < feather) {
+                    factor = maxFactor * (minDist / feather); // Memudar halus di ujung area kotak
+                }
+
+                // Formula Warm Skin Blend Multiplier
+                const targetR = 0.74; 
+                const targetG = 0.50; 
+                const targetB = 0.33; 
 
                 data[i]     = Math.round(r * (1 - factor) + (r * targetR) * factor);
                 data[i + 1] = Math.round(g * (1 - factor) + (g * targetG) * factor);
@@ -137,17 +148,18 @@ function triggerTanning() {
         }
     }
 
-    // Terapkan data warna baru ke layar canvas
+    // Render kembali ke canvas
     ctx.putImageData(imgData, 0, 0);
 }
 
-// Event listener tombol instan
+// Event listener tombol
 tanBtn.addEventListener('click', triggerTanning);
 
 // Event listener download gambar
 downloadBtn.addEventListener('click', () => {
     const link = document.createElement('a');
-    link.download = 'waifu_instant_tanned.png';
+    link.download = 'waifu_perfect_tanned.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
 });
+    
