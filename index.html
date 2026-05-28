@@ -174,7 +174,8 @@ imageInput.addEventListener(
 "change",
 (e)=>{
 
-    selectedFile = e.target.files[0];
+    selectedFile =
+    e.target.files[0];
 
     if(!selectedFile) return;
 
@@ -191,63 +192,186 @@ async ()=>{
     if(!selectedFile){
 
         alert(
-        "Upload gambar terlebih dahulu"
+        "Upload gambar dulu"
         );
 
         return;
     }
 
-    hitamkanBtn.innerText =
-    "Processing...";
+    const img =
+    new Image();
 
-    const formData =
-    new FormData();
+    img.src =
+    URL.createObjectURL(selectedFile);
 
-    formData.append(
-        "image",
-        selectedFile
-    );
+    img.onload = ()=>{
 
-    try{
+        const canvas =
+        document.createElement("canvas");
 
-        const response =
-        await fetch(
-        "/api/hitamkan",
-        {
-            method:"POST",
-            body:formData
-        });
+        const ctx =
+        canvas.getContext("2d");
 
-        const data =
-        await response.json();
+        canvas.width =
+        img.width;
 
-        if(data.error){
+        canvas.height =
+        img.height;
 
-            alert(data.error);
-
-            hitamkanBtn.innerText =
-            "Hitamkan";
-
-            return;
-        }
-
-        resultImg.src =
-        data.image;
-
-        resultImg.classList.add(
-        "show"
+        ctx.drawImage(
+            img,
+            0,
+            0
         );
 
-    }catch(err){
+        const imageData =
+        ctx.getImageData(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
 
-        alert(err.message);
-    }
+        const data =
+        imageData.data;
 
-    hitamkanBtn.innerText =
-    "Hitamkan";
+        // skin mask canvas
+        const maskCanvas =
+        document.createElement("canvas");
+
+        maskCanvas.width =
+        canvas.width;
+
+        maskCanvas.height =
+        canvas.height;
+
+        const maskCtx =
+        maskCanvas.getContext("2d");
+
+        const maskData =
+        maskCtx.createImageData(
+            canvas.width,
+            canvas.height
+        );
+
+        // detect skin
+        for(
+            let i = 0;
+            i < data.length;
+            i += 4
+        ){
+
+            const r = data[i];
+            const g = data[i+1];
+            const b = data[i+2];
+
+            const max =
+            Math.max(r,g,b);
+
+            const min =
+            Math.min(r,g,b);
+
+            const diff =
+            max - min;
+
+            const avg =
+            (r+g+b)/3;
+
+            const isSkin = (
+
+                r > 40 &&
+                g > 20 &&
+                b > 15 &&
+
+                r >= g &&
+                r >= b &&
+
+                diff > 10 &&
+                diff < 120 &&
+
+                avg > 45
+            );
+
+            const alpha =
+            isSkin ? 255 : 0;
+
+            maskData.data[i] = 255;
+            maskData.data[i+1] = 255;
+            maskData.data[i+2] = 255;
+            maskData.data[i+3] = alpha;
+        }
+
+        maskCtx.putImageData(
+            maskData,
+            0,
+            0
+        );
+
+        // feather smooth
+        maskCtx.filter =
+        "blur(8px)";
+
+        maskCtx.drawImage(
+            maskCanvas,
+            0,
+            0
+        );
+
+        // apply dark brown overlay
+        const finalCanvas =
+        document.createElement("canvas");
+
+        finalCanvas.width =
+        canvas.width;
+
+        finalCanvas.height =
+        canvas.height;
+
+        const finalCtx =
+        finalCanvas.getContext("2d");
+
+        // original
+        finalCtx.drawImage(
+            canvas,
+            0,
+            0
+        );
+
+        // overlay dark brown
+        finalCtx.globalCompositeOperation =
+        "source-atop";
+
+        finalCtx.drawImage(
+            maskCanvas,
+            0,
+            0
+        );
+
+        finalCtx.fillStyle =
+        "rgba(92,58,38,0.45)";
+
+        finalCtx.fillRect(
+            0,
+            0,
+            finalCanvas.width,
+            finalCanvas.height
+        );
+
+        finalCtx.globalCompositeOperation =
+        "source-over";
+
+        resultImg.src =
+        finalCanvas.toDataURL(
+            "image/png"
+        );
+
+        resultImg.classList.add(
+            "show"
+        );
+    };
 });
 
-</script>
+                </script>
 
 </body>
 </html>
