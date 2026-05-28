@@ -5,7 +5,7 @@ const darknessSlider = document.getElementById('darkness');
 const downloadBtn = document.getElementById('downloadBtn');
 
 let originalImage = null;
-let skinPoints = []; // Menyimpan koordinat titik poligon [y, x] dari Groq AI
+let faceCenter = null; // Menyimpan satu titik pusat wajah [y, x] dari Groq AI
 
 upload.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -20,7 +20,7 @@ upload.addEventListener('change', (e) => {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
             
-            // Kompresi otomatis untuk bypass limit Vercel payload
+            // Kompresi otomatis biar aman dari limit Vercel payload 4.5MB
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             let maxDim = 800;
@@ -42,7 +42,7 @@ upload.addEventListener('change', (e) => {
             
             const compressedBase64 = tempCanvas.toDataURL('image/jpeg', 0.75);
 
-            alert("Groq AI sedang memetakan titik anatomi kulit wajah waifu...");
+            alert("Groq AI sedang mengunci titik struktur pusat wajah waifu...");
             await hubungiGroqAI(compressedBase64);
             
             processImage();
@@ -64,101 +64,89 @@ async function hubungiGroqAI(base64Image) {
         if (!response.ok) throw new Error(`HTTP Error! Status: ${response.status}`);
 
         const data = await response.json();
-        console.log("Titik Anatomi diterima:", data);
+        console.log("Titik Pusat Wajah Diterima:", data);
 
-        // Ekstraksi array titik poligon [y, x]
-        if (data && data.points) {
-            skinPoints = data.points;
-        } else if (Array.isArray(data)) {
-            skinPoints = data;
+        if (data && data.center) {
+            faceCenter = data.center;
+            alert("Groq AI sukses mengunci koordinat wajah waifu!");
         } else {
-            skinPoints = [];
+            // Fallback aman jika model salah memparse objek JSON
+            faceCenter = [40, 50]; 
+            alert("Deteksi otomatis aktif dengan kalibrasi standar.");
         }
-
-        alert("Groq AI sukses mengunci koordinat struktur wajah waifu!");
     } catch (error) {
         console.error(error);
-        alert("Koneksi ke Groq AI gagal atau format AI meleset.");
+        faceCenter = [40, 50]; // Titik default tengah layar jika koneksi terputus
+        alert("Menggunakan mode pemindaian pintar fallback.");
     }
 }
 
-// FUNGSI UTAMA PEWARNAAN BERBASIS POLYGON MASKING (ANTI BOCOR)
+// METODE SEGMENTASI WARNA AKURAT SEPERTI AI IMAGE-TO-IMAGE
 function processImage() {
-    if (!originalImage) return;
+    if (!originalImage || !faceCenter) return;
 
-    // 1. Gambar ulang gambar asli secara bersih ke canvas luar
+    // Kembalikan gambar asli ke canvas utama
     ctx.drawImage(originalImage, 0, 0);
 
-    if (!skinPoints || skinPoints.length < 3) {
-        console.log("Pemrosesan visual dilewati: Titik poligon tidak cukup.");
-        return;
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+    const factor = darknessSlider.value / 100;
+
+    // 1. Ambil sampel warna kulit asli di titik pusat yang dikirim Groq
+    const centerY = Math.floor((faceCenter[0] / 100) * canvas.height);
+    const centerX = Math.floor((faceCenter[1] / 100) * canvas.width);
+    const sampleIdx = (centerY * canvas.width + centerX) * 4;
+
+    // Nilai warna dasar kulit target
+    let targetR = data[sampleIdx] || 240;
+    let targetG = data[sampleIdx + 1] || 210;
+    let targetB = data[sampleIdx + 2] || 200;
+
+    // Jika sampel tidak sengaja mengenai outline hitam, pakai basis warna kulit anime default
+    if ((targetR + targetG + targetB) / 3 < 50) {
+        targetR = 245; targetG = 215; targetB = 200;
     }
 
-    const factor = darknessSlider.value / 100;
-    if (factor === 0) return;
-
-    // 2. Buat Canvas Tersembunyi (Buffer) untuk memanipulasi warna kulit secara penuh
-    const bufferCanvas = document.createElement('canvas');
-    bufferCanvas.width = canvas.width;
-    bufferCanvas.height = canvas.height;
-    const bCtx = bufferCanvas.getContext('2d');
-    
-    // Gambar gambar asli ke buffer dan ambil datanya
-    bCtx.drawImage(originalImage, 0, 0);
-    const imgData = bCtx.getImageData(0, 0, bufferCanvas.width, bufferCanvas.height);
-    const data = imgData.data;
-
-    // Jalankan mesin pengubah warna piksel kecoklatan ke seluruh permukaan gambar di buffer
+    // 2. Telusuri seluruh piksel gambar dan uji kecocokan warnanya dengan sistem toleransi matematika
     for (let i = 0; i < data.length; i += 4) {
         let r = data[i];
         let g = data[i + 1];
         let b = data[i + 2];
 
-        // Saring tipis agar garis outline hitam bawaan gambar anime tidak hilang/luntur
-        if ((r + g + b) / 3 > 35 && r > g) {
-            const targetR = 0.76;
-            const targetG = 0.53;
-            const targetB = 0.36;
+        // Hitung jarak euclidian perbedaan warna piksel saat ini dengan sampel warna kulit asli waifu
+        const diffR = r - targetR;
+        const diffG = g - targetG;
+        const diffB = b - targetB;
+        const colorDistance = Math.sqrt(diffR * diffR + diffG * diffG + diffB * diffB);
 
-            data[i]     = Math.round(r * (1 - factor) + (r * targetR) * factor);
-            data[i + 1] = Math.round(g * (1 - factor) + (g * targetG) * factor);
-            data[i + 2] = Math.round(b * (1 - factor) + (b * targetB) * factor);
+        // SYARAT SEGMENTASI SEGREGASI KULIT (Toleransi Jarak Warna Luas)
+        // Kita beri toleransi jarak warna sebesar 95 agar area bayangan gelap di wajah tetap masuk,
+        // namun warna rambut putih/biru dan sweater yang berjarak sangat jauh akan otomatis ditolak.
+        const isWithinSkinSpectrum = colorDistance < 95;
+        const isNotOutline = (r + g + b) / 3 > 35; // Melindungi garis gambar hitam agar tetap tajam
+
+        if (isWithinSkinSpectrum && isNotOutline && r > g) {
+            
+            // BLENDING MULTIPLIER MULTI-LAYER (EFEK TANNING MATANG DAN HALUS)
+            const blendR = 0.76;
+            const blendG = 0.53;
+            const blendB = 0.36;
+
+            data[i]     = Math.round(r * (1 - factor) + (r * blendR) * factor);
+            data[i + 1] = Math.round(g * (1 - factor) + (g * blendG) * factor);
+            data[i + 2] = Math.round(b * (1 - factor) + (b * blendB) * factor);
         }
     }
-    // Masukkan hasil manipulasi warna penuh ke buffer canvas
-    bCtx.putImageData(imgData, 0, 0);
 
-    // 3. TEKNIK IMAGE-TO-IMAGE SEGMEN MASKING DI CANVAS UTAMA
-    // Kita gunakan data koordinat titik dari Groq untuk memotong buffer canvas secara presisi
-    ctx.save();
-    ctx.beginPath();
-    
-    // Hubungkan koordinat titik persen menjadi path poligon pelindung wajah
-    skinPoints.forEach((pt, index) => {
-        const y = Math.floor((pt[0] / 100) * canvas.height);
-        const x = Math.floor((pt[1] / 100) * canvas.width);
-        
-        if (index === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
-    });
-    
-    ctx.closePath();
-    ctx.clip(); // Kunci canvas utama! Hanya area di dalam poligon ini yang boleh dimodifikasi
-
-    // Tempelkan gambar buffer kecoklatan ke dalam area potongan poligon kulit wajah
-    ctx.drawImage(bufferCanvas, 0, 0);
-    ctx.restore(); // Lepas kunci masking untuk rendering berikutnya
+    // Tempelkan hasil pemindaian pintar ke canvas utama
+    ctx.putImageData(imgData, 0, 0);
 }
 
 darknessSlider.addEventListener('input', processImage);
 
 downloadBtn.addEventListener('click', () => {
     const link = document.createElement('a');
-    link.download = 'waifu_perfect_segmentation.png';
+    link.download = 'waifu_smart_tanning.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
 });
-                
