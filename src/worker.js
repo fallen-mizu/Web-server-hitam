@@ -4,7 +4,6 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Pengaturan Header CORS
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
@@ -15,7 +14,6 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Hanya tangani rute POST ke /api/chat
     if (url.pathname === "/api/chat" && request.method === "POST") {
       try {
         const groq = new Groq({ apiKey: env.GROQ_API_KEY });
@@ -29,7 +27,7 @@ export default {
           });
         }
 
-        // Panggil Groq AI Vision
+        // PERINTAH LANGSUNG KE AI UNTUK MENGEDIT DAN MENGEMBALIKAN GAMBAR BASE64
         const response = await groq.chat.completions.create({
           model: "llama3-vision-8b-instant",
           messages: [
@@ -38,7 +36,7 @@ export default {
               content: [
                 {
                   type: "text",
-                  text: "Locate the continuous bounding box area of the anime character's visible facial skin and neck skin. Return a JSON object with a single key 'box' containing the coordinates [ymin, xmin, ymax, xmax] scaled from 0 to 100. Example format: {\"box\": [20, 35, 65, 70]}. Output ONLY raw valid JSON, no markdown, no explanation."
+                  text: "You are an advanced image processing AI. Do not redraw, do not rebuild, and do not change the art style, the clothes, the eyes, or the white hair of the character in this image. Your ONLY task is to edit and modify the color of the visible skin (face, ears, neck) to a deep, dark, realistic exotic tan (#4A2E2B / #3D231F style) while perfectly preserving all original line art, shading, and highlights. Return the final edited image as a base64 Data URL string inside a JSON object with the key 'editedImage'. Example: {\"editedImage\": \"data:image/jpeg;base64,...\"}. Output ONLY raw valid JSON."
                 },
                 {
                   type: "image_url",
@@ -47,7 +45,7 @@ export default {
               ]
             }
           ],
-          temperature: 0.1,
+          temperature: 0.2,
           response_format: { type: "json_object" }
         });
 
@@ -58,14 +56,13 @@ export default {
         });
 
       } catch (error) {
-        return new Response(JSON.stringify({ error: "Groq gagal memproses", message: error.message }), {
+        return new Response(JSON.stringify({ error: "Groq gagal mengedit gambar", message: error.message }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
 
-    // Jika mengakses rute lain, biarkan Cloudflare mengembalikan aset statis (index.html) dari folder public
     return env.ASSETS.fetch(request);
   },
 };
