@@ -1,12 +1,13 @@
 const upload = document.getElementById('upload');
 const canvas = document.getElementById('outputCanvas');
 const ctx = canvas.getContext('2d');
-const darknessSlider = document.getElementById('darkness');
+const tanBtn = document.getElementById('tanBtn');
 const downloadBtn = document.getElementById('downloadBtn');
 
 let originalImage = null;
 let activeBox = null; 
 
+// 1. Handler Event Proses Upload Gambar
 upload.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -20,7 +21,7 @@ upload.addEventListener('change', (e) => {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
             
-            // Kompresi otomatis bypass payload limit Vercel
+            // Kompresi otomatis biar aman dari payload limit Vercel (4.5MB)
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             let maxDim = 800;
@@ -45,7 +46,8 @@ upload.addEventListener('change', (e) => {
             alert("Menghubungi Groq AI Vision untuk memindai struktur gambar...");
             await hubungiGroqVision(compressedBase64);
             
-            processImage();
+            // Tampilkan tombol eksekusi setelah koordinat terkunci
+            tanBtn.classList.remove('hidden');
             downloadBtn.classList.remove('hidden');
         };
         img.src = event.target.result;
@@ -53,6 +55,7 @@ upload.addEventListener('change', (e) => {
     reader.readAsDataURL(file);
 });
 
+// 2. Fungsi Mengambil Koordinat dari Groq AI Vision
 async function hubungiGroqVision(base64Image) {
     try {
         const response = await fetch('/api/chat', {
@@ -80,16 +83,21 @@ async function hubungiGroqVision(base64Image) {
     }
 }
 
-// TANNING ENGINE - VERSI TOLERANSI TINGGI (ANTI-MACET)
-function processImage() {
-    if (!originalImage || !activeBox) return;
+// 3. Eksekusi Tanning Instan Sekali Klik (Anti-Macet)
+function triggerTanning() {
+    if (!originalImage || !activeBox) {
+        alert("Silakan upload gambar terlebih dahulu.");
+        return;
+    }
 
-    // Reset gambar asli ke canvas utama
+    // Pastikan gambar di-reset ke kondisi asli sebelum diwarnai coklat
     ctx.drawImage(originalImage, 0, 0);
 
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
-    const factor = darknessSlider.value / 100;
+    
+    // Kita kunci nilai intensitas kegelapan di angka 0.72 (Efek Tanned Matang Eksotis yang Pas)
+    const factor = 0.72; 
 
     // Konversi koordinat persen Groq ke ukuran pixel canvas riil
     const ymin = Math.max(0, Math.floor((activeBox[0] / 100) * canvas.height));
@@ -97,7 +105,9 @@ function processImage() {
     const ymax = Math.min(canvas.height, Math.floor((activeBox[2] / 100) * canvas.height));
     const xmax = Math.min(canvas.width, Math.floor((activeBox[3] / 100) * canvas.width));
 
-    // Lakukan pemindaian piksel secara selektif HANYA di area kotak wajah waifu
+    console.log(`Mengeksekusi pemindaian piksel pada area kotak: Y[${ymin}-${ymax}] X[${xmin}-${xmax}]`);
+
+    // Jalankan manipulasi piksel langsung di area wajah
     for (let y = ymin; y < ymax; y++) {
         for (let x = xmin; x < xmax; x++) {
             const i = (y * canvas.width + x) * 4;
@@ -106,21 +116,20 @@ function processImage() {
             let g = data[i + 1];
             let b = data[i + 2];
 
-            // VALIDASI SPEKTRUM KULIT DENGAN TOLERANSI DILONGGARKAN
-            // Karena gambar memiliki tint ungu/biru, syarat R > G kita longgarkan menjadi r > g - 15
+            // Filter Spektrum Rona Kulit Anime dengan Toleransi Cahaya Biru/Ungu
             const isSkinTone = (r > g - 15) && (r > b - 25) && ((r + g + b) / 3 > 30);
 
-            // Proteksi agar warna garis outline hitam komik tidak ikut luntur
-            const isNotDarkOutline = (r < 30 && g < 30 && b < 30) ? false : true;
+            // Proteksi garis komik / outline hitam agar tidak pudar
+            const isNotDarkOutline = !(r < 35 && g < 35 && b < 35);
 
-            // Proteksi rambut putih: Jika nilai RGB benar-benar identik sama (seperti abu-abu/putih murni), skip.
-            const isNotPureWhiteHair = Math.abs(r - g) > 6 || Math.abs(r - b) > 6;
+            // Proteksi rambut putih/abu-abu Arisu agar tidak ikut kecoklatan
+            const isNotWhiteHair = Math.abs(r - g) > 6 || Math.abs(r - b) > 6;
 
-            if (isSkinTone && isNotDarkOutline && isNotPureWhiteHair) {
-                // ALGORITMA PERPADUAN WARNA COKLAT MATANG (WARM TANNING BLEND)
-                const targetR = 0.76; 
-                const targetG = 0.54; 
-                const targetB = 0.36; 
+            if (isSkinTone && isNotDarkOutline && isNotWhiteHair) {
+                // Formula Blending Multiplier Warna Coklat Eksotis
+                const targetR = 0.75; 
+                const targetG = 0.52; 
+                const targetB = 0.35; 
 
                 data[i]     = Math.round(r * (1 - factor) + (r * targetR) * factor);
                 data[i + 1] = Math.round(g * (1 - factor) + (g * targetG) * factor);
@@ -129,16 +138,19 @@ function processImage() {
         }
     }
 
-    // Render kembali ke canvas utama
+    // Paksa canvas melakukan render ulang data piksel baru
     ctx.putImageData(imgData, 0, 0);
+    alert("Proses menghitamkan kulit waifu selesai!");
 }
 
-darknessSlider.addEventListener('input', processImage);
+// 4. Hubungkan Fungsi ke Tombol Utama Baru
+tanBtn.addEventListener('click', triggerTanning);
 
+// 5. Handler Unduh Gambar Hasil Akhir
 downloadBtn.addEventListener('click', () => {
     const link = document.createElement('a');
-    link.download = 'waifu_perfect_tanned.png';
+    link.download = 'waifu_instant_tanned.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
 });
-        
+                
