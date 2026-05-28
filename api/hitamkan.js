@@ -87,12 +87,11 @@ export default async function handler(req, res) {
             "prompt",
             `
             darker brown skin tone,
-            realistic human skin,
             preserve original face,
             preserve clothes,
             preserve background,
             preserve hairstyle,
-            same person,
+            same character,
             only skin color changes
             `
         );
