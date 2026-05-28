@@ -8,23 +8,22 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { image } = req.body; // Base64 Image string dari frontend
+        const { image } = req.body;
 
-        // Kirim gambar ke Groq AI Vision untuk mendeteksi koordinat kulit waifu
         const response = await groq.chat.completions.create({
-            model: "meta-llama/llama-4-scout-17b-16e-instruct",
+            model: "llama-3.2-11b-vision-preview",
             messages: [
                 {
                     role: "user",
                     content: [
                         {
                             type: "text",
-                            text: "Locate all visible skin areas (face, neck, hands, legs) of the anime character in this image. Return ONLY a JSON array of bounding boxes in the format: [[ymin, xmin, ymax, xmax]]. Normalized coordinates between 0 and 100. Do not write any explanations, just the JSON."
+                            text: "Identify all bounding boxes of visible skin areas (face, neck, hands) of the anime character. Return a JSON object with a single key 'boxes' containing an array of boxes, where each box is [ymin, xmin, ymax, xmax] normalized from 0 to 100. Example: {\"boxes\": [[10, 20, 50, 60]]}. Do not return any other text."
                         },
                         {
                             type: "image_url",
                             image_url: {
-                                url: image // Mengirim base64 data url
+                                url: image
                             }
                         }
                     ]
