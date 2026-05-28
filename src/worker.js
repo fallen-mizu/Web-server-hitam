@@ -1,7 +1,6 @@
 export default {
   async fetch(request, env, ctx) {
-    // Backend Cloudflare Worker sekarang menjadi sangat sederhana, 
-    // hanya menyajikan file statis dari folder public secara gratis.
+    // Menyajikan aset statis secara bersih, instan, dan 100% gratis dari Cloudflare Assets
     return env.ASSETS.fetch(request);
   },
 };
