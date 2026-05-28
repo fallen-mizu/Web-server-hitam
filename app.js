@@ -13,6 +13,7 @@ imageInput.addEventListener("change", (e) => {
 
     previewImg.src = URL.createObjectURL(selectedFile);
 });
+previewImg.classList.add("show");
 
 hitamkanBtn.addEventListener("click", async () => {
 
