@@ -26,6 +26,52 @@ export const config = {
     }
 };
 
+function rgbToHsv(r, g, b) {
+
+    r /= 255;
+    g /= 255;
+    b /= 255;
+
+    let max = Math.max(r, g, b);
+    let min = Math.min(r, g, b);
+
+    let h, s, v = max;
+
+    let d = max - min;
+
+    s = max === 0 ? 0 : d / max;
+
+    if (max === min) {
+
+        h = 0;
+
+    } else {
+
+        switch (max) {
+
+            case r:
+                h = (g - b) / d + (g < b ? 6 : 0);
+                break;
+
+            case g:
+                h = (b - r) / d + 2;
+                break;
+
+            case b:
+                h = (r - g) / d + 4;
+                break;
+        }
+
+        h /= 6;
+    }
+
+    return {
+        h: h * 360,
+        s,
+        v
+    };
+}
+
 export default async function handler(req, res) {
 
     if (req.method !== "POST") {
@@ -50,7 +96,6 @@ export default async function handler(req, res) {
             });
         }
 
-        // ambil raw pixel
         const image =
         sharp(req.file.buffer);
 
@@ -63,13 +108,6 @@ export default async function handler(req, res) {
             resolveWithObject: true
         });
 
-        // target dark brown
-        const targetSkin = {
-            r: 92,
-            g: 58,
-            b: 38
-        };
-
         for (
             let i = 0;
             i < data.length;
@@ -80,59 +118,47 @@ export default async function handler(req, res) {
             let g = data[i + 1];
             let b = data[i + 2];
 
-            // skin detection lebih smooth
+            const hsv =
+            rgbToHsv(r, g, b);
+
+            // skin detect jauh lebih smooth
             const isSkin = (
 
-                r > 65 &&
-                g > 35 &&
-                b > 20 &&
+                hsv.h > 0 &&
+                hsv.h < 45 &&
 
-                r > g &&
-                r > b &&
+                hsv.s > 0.15 &&
+                hsv.s < 0.75 &&
 
-                (r - g) > 8 &&
-                (r - b) > 12 &&
-
-                Math.abs(r - g) < 120
+                hsv.v > 0.25
             );
 
             if (isSkin) {
 
-                // preserve shading asli
-                const brightness =
-                (r + g + b) / 3 / 255;
+                // dark brown blend smooth
+                const blend = 0.35;
 
-                // blend natural
-                data[i] = Math.min(
-                    255,
+                const targetR = 92;
+                const targetG = 58;
+                const targetB = 38;
 
-                    Math.round(
-                        r * 0.58 +
-                        targetSkin.r * 0.42 * brightness
-                    )
+                data[i] = Math.round(
+                    r * (1 - blend) +
+                    targetR * blend
                 );
 
-                data[i + 1] = Math.min(
-                    255,
-
-                    Math.round(
-                        g * 0.58 +
-                        targetSkin.g * 0.42 * brightness
-                    )
+                data[i + 1] = Math.round(
+                    g * (1 - blend) +
+                    targetG * blend
                 );
 
-                data[i + 2] = Math.min(
-                    255,
-
-                    Math.round(
-                        b * 0.58 +
-                        targetSkin.b * 0.42 * brightness
-                    )
+                data[i + 2] = Math.round(
+                    b * (1 - blend) +
+                    targetB * blend
                 );
             }
         }
 
-        // rebuild image halus
         const output =
         await sharp(data, {
 
@@ -144,11 +170,12 @@ export default async function handler(req, res) {
 
         })
 
-        .median(1)
+        // smoothing agar tidak bercak
+        .blur(0.6)
 
         .png({
-            compressionLevel: 0,
-            quality: 100
+            quality: 100,
+            compressionLevel: 0
         })
 
         .toBuffer();
@@ -170,4 +197,4 @@ export default async function handler(req, res) {
             err.message
         });
     }
-}
+                }
