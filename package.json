@@ -1,11 +1,15 @@
 {
-  "name": "ai-hitamkan",
+  "name": "waifu-skin-customizer",
   "version": "1.0.0",
-  "type": "module",
+  "description": "Web Customizer Waifu menggunakan Groq AI",
+  "main": "api/chat.js",
+  "scripts": {
+    "start": "node api/chat.js"
+  },
   "dependencies": {
-    "multer": "^1.4.5-lts.1",
-    "axios": "^1.7.2",
-     "form-data": "^4.0.0",
-    "sharp": "^0.33.4"
+    "@groq/groq-sdk": "^0.3.0"
+  },
+  "engines": {
+    "node": "18.x"
   }
 }
