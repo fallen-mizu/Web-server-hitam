@@ -66,7 +66,7 @@ export default async function handler(req, res) {
             method: "post",
 
             url:
-            "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix",
+            "https://router.huggingface.co/hf-inference/models/timbrooks/instruct-pix2pix",
 
             headers: {
                 Authorization:
