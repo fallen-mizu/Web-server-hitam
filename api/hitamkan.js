@@ -1,5 +1,6 @@
 import multer from "multer";
 import axios from "axios";
+import FormData from "form-data";
 
 const upload = multer({
     storage: multer.memoryStorage()
@@ -50,67 +51,85 @@ export default async function handler(req, res) {
             });
         }
 
-        const HF_TOKEN =
-        process.env.HF_TOKEN;
+        const API_KEY =
+        process.env.STABILITY_API_KEY;
 
-        if (!HF_TOKEN) {
+        if (!API_KEY) {
 
             return res.status(500).json({
-                error: "HF_TOKEN missing"
+                error: "Missing STABILITY_API_KEY"
             });
         }
 
-        const response =
-        await axios({
+        const formData =
+        new FormData();
 
-            method: "post",
-
-            url:
-            "https://router.huggingface.co/hf-inference/models/timbrooks/instruct-pix2pix",
-
-            headers: {
-                Authorization:
-                `Bearer ${HF_TOKEN}`,
-                "Content-Type":
-                req.file.mimetype
-            },
-
-            data:
+        formData.append(
+            "init_image",
             req.file.buffer,
+            {
+                filename: "image.png"
+            }
+        );
 
-            responseType:
-            "arraybuffer",
+        formData.append(
+            "image_strength",
+            "0.35"
+        );
 
-            params: {
+        formData.append(
+            "text_prompts[0][text]",
+            "dark brown skin tone, preserve face, preserve clothes, preserve background, realistic human skin"
+        );
 
-                inputs:
-                "make skin darker naturally while preserving face, hair, clothes and background"
+        const response =
+        await axios.post(
+
+        "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/image-to-image",
+
+        formData,
+
+        {
+            headers: {
+                ...formData.getHeaders(),
+
+                Authorization:
+                `Bearer ${API_KEY}`,
+
+                Accept:
+                "application/json"
             }
         });
 
-        const base64 =
-        Buffer
-        .from(response.data)
-        .toString("base64");
+        const image =
+        response.data
+        .artifacts?.[0]?.base64;
+
+        if (!image) {
+
+            return res.status(500).json({
+                error: "No image generated"
+            });
+        }
 
         return res.status(200).json({
 
             image:
-            `data:image/png;base64,${base64}`
+            `data:image/png;base64,${image}`
 
         });
 
     } catch (err) {
 
         console.log(
-            err.response?.data?.toString() ||
+            err.response?.data ||
             err.message
         );
 
         return res.status(500).json({
 
             error:
-            err.response?.data?.toString() ||
+            err.response?.data?.message ||
             err.message
 
         });
