@@ -102,7 +102,7 @@ async function hubungiGroqAI(base64Image) {
 
     } catch (error) {
         console.error("Gagal melakukan deteksi lewat Groq:", error);
-        alert("Koneksi ke Groq AI gagal. Pastikan GROQ_API_KEY sudah terpasang di Environment Variables project waifu-delta pada dashboard Vercel.");
+        alert("Koneksi ke Groq AI gagal atau API Key bermasalah.");
     }
 }
 
@@ -117,10 +117,28 @@ function processImage() {
     const data = imgData.data;
     const factor = darknessSlider.value / 100; // Mengubah skala slider menjadi 0.0 - 1.0
 
-    // Jika koordinat kosong atau deteksi gagal, lewati pemrosesan visual
     if (!skinBoxes || skinBoxes.length === 0) {
         console.log("Pemrosesan dibatalkan: Koordinat kulit tidak ditemukan.");
         return;
+    }
+
+    // Fungsi pembantu konversi RGB ke HSL untuk menyeleksi kulit secara presisi
+    function rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        if (max === min) { h = s = 0; } 
+        else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return [h * 360, s * 100, l * 100];
     }
 
     // Eksekusi perubahan warna untuk setiap box koordinat yang dikirim oleh Groq
@@ -140,19 +158,59 @@ function processImage() {
                 let g = data[i + 1];
                 let b = data[i + 2];
 
-                // Hitung nilai rata-rata tingkat kecerahan piksel (Luminance)
-                const brightness = (r + g + b) / 3;
+                // Konversi piksel ke HSL untuk deteksi akurat
+                const [h, s, l] = rgbToHsl(r, g, b);
 
-                // Proteksi Komponen Esensial: Hanya ubah area kulit/wajah yang cerah
-                // Abaikan piksel gelap seperti garis hitam kelopak mata, pupil, alis, atau bayangan rambut tajam
-                if (brightness > 60) {
+                // FILTER PEMISAH KULIT VS RAMBUT (Menghindari efek kotak kaku)
+                // Piksel kulit asli waifu di dalam pencahayaan ungu/biru umumnya:
+                // - Cukup cerah (Lightness > 58)
+                // - Memiliki tone hangat (Nilai Red lebih besar dari Green dan Blue)
+                // - Bukan warna putih/abu-abu netral tipis milik rambut (Saturation > 8)
+                const isSkinColor = (l > 58) && (r > g) && (r > b - 10) && (s > 8);
+
+                // Proteksi tambahan: Singkirkan aksesoris pita biru tua dan background emas di sekitar kepala
+                const isNotBlueAccessory = !(h > 200 && h < 260 && l < 50);
+                const isNotBackgroundGold = !(h > 40 && h < 65 && l > 65);
+
+                if (isSkinColor && isNotBlueAccessory && isNotBackgroundGold) {
                     
                     // ALGORITMA PENGIKUT WARNA TAN WARM
-                    // Untuk meredam filter ambient cahaya biru/ungu yang menempel pada wajah waifu:
-                    // Kita potong nilai biru (B) dan hijau (G) secara masif, lalu biarkan nilai merah (R) dominan.
-                    data[i]     = r * (1 - factor * 0.22); // Red diturunkan sedikit saja agar tetap hangat
-                    data[i + 1] = g * (1 - factor * 0.52); // Green diturunkan sedang
-                    data[i + 2] = b * (1 - factor * 0.72); // Blue dipotong tajam untuk membuang tint ungu/biru bawaan
+                    // Kurangi tingkat kecerahan sebanding dengan nilai slider
+                    let newL = l - (factor * 35);
+                    if (newL < 15) newL = 15; // Batas aman agar tidak menjadi hitam legam
+
+                    // Belokkan Hue ke arah spektrum orange/kulit matang hangat (sekitar 22 derajat)
+                    let newH = (h > 300 || h < 35) ? 22 : h;
+                    let newS = s + (factor * 20);
+                    if (newS > 85) newS = 85;
+
+                    // Konversi balik dari HSL ke RGB untuk diterapkan ke canvas
+                    const hRad = newH / 360;
+                    const sRad = newS / 100;
+                    const lRad = newL / 100;
+
+                    let rTemp, gTemp, bTemp;
+                    if (sRad === 0) {
+                        rTemp = gTemp = bTemp = lRad;
+                    } else {
+                        const q = lRad < 0.5 ? lRad * (1 + sRad) : lRad + sRad - lRad * sRad;
+                        const p = 2 * lRad - q;
+                        const hue2rgb = (p, q, t) => {
+                            if (t < 0) t += 1;
+                            if (t > 1) t -= 1;
+                            if (t < 1/6) return p + (q - p) * 6 * t;
+                            if (t < 1/2) return q;
+                            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                            return p;
+                        };
+                        rTemp = hue2rgb(p, q, hRad + 1/3);
+                        gTemp = hue2rgb(p, q, hRad);
+                        bTemp = hue2rgb(p, q, hRad - 1/3);
+                    }
+
+                    data[i]     = Math.round(rTemp * 255);
+                    data[i + 1] = Math.round(gTemp * 255);
+                    data[i + 2] = Math.round(bTemp * 255);
                 }
             }
         }
@@ -172,4 +230,4 @@ downloadBtn.addEventListener('click', () => {
     link.href = canvas.toDataURL('image/png');
     link.click();
 });
-                    
+                              
