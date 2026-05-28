@@ -9,7 +9,7 @@ const loadingText = document.getElementById('loadingText');
 let originalImage = null;
 let activeBox = null; 
 
-// 1. Jalankan upload gambar
+// 1. Handler Upload Gambar
 upload.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -23,10 +23,10 @@ upload.addEventListener('change', (e) => {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
             
-            // Kompresi resolusi tinggi dengan menjaga kualitas agar noise rambut hilang
+            // Kompresi resolusi tinggi agar deteksi warna presisi
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
-            let maxDim = 1024; // Diperbesar ke 1024 agar deteksi mata Groq lebih halus
+            let maxDim = 1024;
             let width = img.width;
             let height = img.height;
             
@@ -61,7 +61,7 @@ upload.addEventListener('change', (e) => {
     reader.readAsDataURL(file);
 });
 
-// 2. Hubungi backend Groq Vision resmi di Cloudflare Workers
+// 2. Mengambil Koordinat Box dari Groq AI
 async function hubungiGroqVision(base64Image) {
     try {
         const response = await fetch(`${window.location.origin}/api/chat`, {
@@ -78,77 +78,89 @@ async function hubungiGroqVision(base64Image) {
         if (data && data.box) {
             activeBox = data.box;
         } else {
-            activeBox = data.boxes ? data.boxes[0] : [5, 15, 90, 85];
+            activeBox = data.boxes ? data.boxes[0] : [5, 10, 95, 90];
         }
     } catch (error) {
         console.error("Gagal menghubungi backend Worker:", error);
-        activeBox = [5, 15, 90, 85]; 
+        activeBox = [5, 10, 95, 90]; 
     }
 }
 
-// 3. Fungsi Eksekusi Tanning Sekali Klik dengan Algoritma Soft Edge Blending
+// 3. Mesin Tanning Professional (Mengikuti Contoh Target Gambar)
 function triggerTanning() {
     if (!originalImage || !activeBox) return;
 
-    // Reset ke kondisi awal gambar murni
+    // Reset kanvas ke gambar asli murni
     ctx.drawImage(originalImage, 0, 0);
 
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
-    
-    // Faktor kegelapan dioptimalkan ke 0.68 agar gradasi bayangan menyatu alami
-    const maxFactor = 0.68; 
 
+    // Konversi koordinat persen ke pixel riil
     const ymin = Math.max(0, Math.floor((activeBox[0] / 100) * canvas.height));
     const xmin = Math.max(0, Math.floor((activeBox[1] / 100) * canvas.width));
     const ymax = Math.min(canvas.height, Math.floor((activeBox[2] / 100) * canvas.height));
     const xmax = Math.min(canvas.width, Math.floor((activeBox[3] / 100) * canvas.width));
 
-    // Ukuran border luar untuk transisi pemudaran efek (mencegah garis lurus kaku)
-    const feather = 15; 
+    // LANGKAH A: Cari sampel warna kulit asli waifu di titik tengah kotak secara otomatis
+    const midY = Math.floor((ymin + ymax) / 2);
+    const midX = Math.floor((xmin + xmax) / 2);
+    const sampleIdx = (midY * canvas.width + midX) * 4;
 
-    for (let y = ymin; y < ymax; y++) {
-        for (let x = xmin; x < xmax; x++) {
-            const i = (y * canvas.width + x) * 4;
+    let baseR = data[sampleIdx] || 245;
+    let baseG = data[sampleIdx + 1] || 215;
+    let baseB = data[sampleIdx + 2] || 200;
 
-            let r = data[i];
-            let g = data[i + 1];
-            let b = data[i + 2];
+    // Jika sampel mendeteksi outline atau warna gelap, reset ke standar rona kulit anime
+    if ((baseR + baseG + baseB) / 3 < 50) {
+        baseR = 245; baseG = 215; baseB = 200;
+    }
 
-            // 1. FILTER SPEKTRUM KULIT ANIME (DIPERKETAT AGAR RAMBUT PUTIH / BG TIDAK TEMBUS)
-            const isSkinTone = (r > g) && (g > b || Math.abs(g - b) < 20) && (r > 40);
+    // LANGKAH B: Pemindaian Piksel dengan Logika Soft Masking Multiplier
+    // Target warna kulit gelap eksotis yang pekat dan hangat (Mengikuti Gambar Contoh)
+    const targetFactorR = 0.32; 
+    const targetFactorG = 0.22; 
+    const targetFactorB = 0.18; 
 
-            // 2. PROTEKSI RAMBUT PUTIH/ABU ARISU (Nilai RGB sangat berdekatan)
-            const isWhiteOrGrayHair = Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && (r > 120);
+    for (let i = 0; i < data.length; i += 4) {
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
 
-            // 3. PROTEKSI OUTLINE DAN AREA GELAP
-            const isOutline = r < 40 && g < 40 && b < 40;
+        // Hitung jarak kemiripan warna piksel saat ini dengan sampel warna kulit dasar
+        const diffR = r - baseR;
+        const diffG = g - baseG;
+        const diffB = b - baseB;
+        const colorDistance = Math.sqrt(diffR * diffR + diffG * diffG + diffB * diffB);
 
-            if (isSkinTone && !isWhiteOrGrayHair && !isOutline) {
-                
-                // HITUNG FEATHERING (Mencegah efek patah kotak di tepi deteksi)
-                let distY = Math.min(y - ymin, ymax - y);
-                let distX = Math.min(x - xmin, xmax - x);
-                let minDist = Math.min(distX, distY);
-                
-                let factor = maxFactor;
-                if (minDist < feather) {
-                    factor = maxFactor * (minDist / feather); // Memudar halus di ujung area kotak
-                }
+        // Proteksi Garis Outline dan Area Sangat Gelap (Mencegah kompresi pecah)
+        const currentBrightness = (r + g + b) / 3;
+        if (currentBrightness < 45) continue;
 
-                // Formula Warm Skin Blend Multiplier
-                const targetR = 0.74; 
-                const targetG = 0.50; 
-                const targetB = 0.33; 
+        // Proteksi Rambut Putih/Abu-Abu Netral dan Pakaian Putih Bersih
+        const isNeutralColor = Math.abs(r - g) < 8 && Math.abs(g - b) < 8;
+        if (isNeutralColor && currentBrightness > 130) continue;
 
-                data[i]     = Math.round(r * (1 - factor) + (r * targetR) * factor);
-                data[i + 1] = Math.round(g * (1 - factor) + (g * targetG) * factor);
-                data[i + 2] = Math.round(b * (1 - factor) + (b * targetB) * factor);
-            }
+        // Toleransi spektrum warna kulit diperluas hingga 115 agar leher dan bayangan wajah ikut terwarnai
+        if (colorDistance < 115 && r > g - 10) {
+            
+            // Menggunakan fungsi kelandaian (Smoothstep) agar transisi warna di tepi objek tidak kasar/patah
+            let weight = (115 - colorDistance) / 115;
+            weight = weight * weight * (3 - 2 * weight); // Smooth interpolation
+
+            // Hitung hasil perpaduan warna coklat pekat eksotis yang natural
+            const finalR = Math.round(r * (1 - weight) + (r * targetFactorR) * weight);
+            const finalG = Math.round(g * (1 - weight) + (g * targetFactorG) * weight);
+            const finalB = Math.round(b * (1 - weight) + (b * targetFactorB) * weight);
+
+            // Terapkan warna baru dengan menjaga garis shading asli
+            data[i]     = finalR;
+            data[i + 1] = finalG;
+            data[i + 2] = finalB;
         }
     }
 
-    // Render kembali ke canvas
+    // Tampilkan hasil akhir yang bersih ke canvas
     ctx.putImageData(imgData, 0, 0);
 }
 
