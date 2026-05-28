@@ -12,6 +12,8 @@ document.getElementById("hitamkanBtn");
 
 let selectedFile;
 
+let pickedColor = null;
+
 imageInput.addEventListener(
 "change",
 (e)=>{
@@ -29,6 +31,71 @@ imageInput.addEventListener(
     );
 });
 
+// PICK SKIN COLOR
+previewImg.addEventListener(
+"click",
+(e)=>{
+
+    const canvas =
+    document.createElement("canvas");
+
+    const ctx =
+    canvas.getContext("2d");
+
+    canvas.width =
+    previewImg.naturalWidth;
+
+    canvas.height =
+    previewImg.naturalHeight;
+
+    ctx.drawImage(
+        previewImg,
+        0,
+        0
+    );
+
+    const rect =
+    previewImg.getBoundingClientRect();
+
+    const scaleX =
+    previewImg.naturalWidth /
+    rect.width;
+
+    const scaleY =
+    previewImg.naturalHeight /
+    rect.height;
+
+    const x =
+    Math.floor(
+        (e.clientX - rect.left)
+        * scaleX
+    );
+
+    const y =
+    Math.floor(
+        (e.clientY - rect.top)
+        * scaleY
+    );
+
+    const pixel =
+    ctx.getImageData(
+        x,
+        y,
+        1,
+        1
+    ).data;
+
+    pickedColor = {
+        r: pixel[0],
+        g: pixel[1],
+        b: pixel[2]
+    };
+
+    alert(
+        "Warna kulit dipilih!"
+    );
+});
+
 hitamkanBtn.addEventListener(
 "click",
 ()=>{
@@ -37,6 +104,15 @@ hitamkanBtn.addEventListener(
 
         alert(
         "Upload gambar dulu"
+        );
+
+        return;
+    }
+
+    if(!pickedColor){
+
+        alert(
+        "Klik warna kulit dulu pada preview"
         );
 
         return;
@@ -86,38 +162,34 @@ hitamkanBtn.addEventListener(
         const data =
         imageData.data;
 
-        // target dark brown
         const target = {
-            r: 92,
-            g: 58,
-            b: 38
+            r:92,
+            g:58,
+            b:38
         };
 
-        // mask
+        // smooth mask
         const mask =
         new Float32Array(
             canvas.width *
             canvas.height
         );
 
-        // ======================
-        // SKIN DETECTION
-        // ======================
-
+        // DETECT SIMILAR COLOR
         for(
-            let y = 0;
-            y < canvas.height;
+            let y=0;
+            y<canvas.height;
             y++
         ){
 
             for(
-                let x = 0;
-                x < canvas.width;
+                let x=0;
+                x<canvas.width;
                 x++
             ){
 
                 const index =
-                (y * canvas.width + x);
+                y * canvas.width + x;
 
                 const i =
                 index * 4;
@@ -126,167 +198,38 @@ hitamkanBtn.addEventListener(
                 const g = data[i+1];
                 const b = data[i+2];
 
-                // RGB -> HSV
-                const rn = r/255;
-                const gn = g/255;
-                const bn = b/255;
+                const dist = Math.sqrt(
 
-                const max =
-                Math.max(rn,gn,bn);
+                    (r-pickedColor.r)**2 +
 
-                const min =
-                Math.min(rn,gn,bn);
+                    (g-pickedColor.g)**2 +
 
-                const diff =
-                max - min;
+                    (b-pickedColor.b)**2
+                );
 
-                let h = 0;
+                // tolerance
+                let alpha = 0;
 
-                if(diff !== 0){
+                if(dist < 85){
 
-                    switch(max){
-
-                        case rn:
-                            h =
-                            ((gn-bn)/diff)%6;
-                        break;
-
-                        case gn:
-                            h =
-                            (bn-rn)/diff + 2;
-                        break;
-
-                        case bn:
-                            h =
-                            (rn-gn)/diff + 4;
-                        break;
-                    }
-
-                    h *= 60;
-
-                    if(h < 0)
-                    h += 360;
+                    alpha =
+                    1 - (dist / 85);
                 }
 
-                const s =
-                max === 0
-                ? 0
-                : diff/max;
-
-                const v = max;
-
-                let skin = 0;
-
-                // anime skin range
-                if(
-
-                    h >= 0 &&
-                    h <= 35 &&
-
-                    s >= 0.12 &&
-                    s <= 0.68 &&
-
-                    v >= 0.32
-
-                ){
-
-                    skin = 1;
-
-                    // anti false positive
-                    if(
-                        Math.abs(r-g) < 6 &&
-                        Math.abs(r-b) < 6
-                    ){
-                        skin = 0;
-                    }
-
-                    // avoid dark objects
-                    if(v < 0.38){
-                        skin = 0;
-                    }
-                }
-
-                mask[index] = skin;
+                mask[index] = alpha;
             }
         }
 
-        // ======================
-        // FEATHER SMOOTH
-        // ======================
-
-        const smoothMask =
-        new Float32Array(mask.length);
-
-        const radius = 4;
-
-        for(
-            let y = 0;
-            y < canvas.height;
-            y++
-        ){
-
-            for(
-                let x = 0;
-                x < canvas.width;
-                x++
-            ){
-
-                let total = 0;
-                let count = 0;
-
-                for(
-                    let dy = -radius;
-                    dy <= radius;
-                    dy++
-                ){
-
-                    for(
-                        let dx = -radius;
-                        dx <= radius;
-                        dx++
-                    ){
-
-                        const nx = x + dx;
-                        const ny = y + dy;
-
-                        if(
-                            nx >= 0 &&
-                            ny >= 0 &&
-                            nx < canvas.width &&
-                            ny < canvas.height
-                        ){
-
-                            total +=
-                            mask[
-                                ny *
-                                canvas.width +
-                                nx
-                            ];
-
-                            count++;
-                        }
-                    }
-                }
-
-                smoothMask[
-                    y * canvas.width + x
-                ] = total / count;
-            }
-        }
-
-        // ======================
         // APPLY DARK BROWN
-        // ======================
-
         for(
-            let y = 0;
-            y < canvas.height;
+            let y=0;
+            y<canvas.height;
             y++
         ){
 
             for(
-                let x = 0;
-                x < canvas.width;
+                let x=0;
+                x<canvas.width;
                 x++
             ){
 
@@ -297,20 +240,19 @@ hitamkanBtn.addEventListener(
                 index * 4;
 
                 const alpha =
-                smoothMask[index];
+                mask[index];
 
-                if(alpha > 0.02){
+                if(alpha > 0.01){
 
                     const r = data[i];
                     const g = data[i+1];
                     const b = data[i+2];
 
-                    // preserve shading
                     const brightness =
                     (r+g+b)/3 / 255;
 
                     const strength =
-                    alpha * 0.52;
+                    alpha * 0.58;
 
                     data[i] = Math.round(
 
@@ -345,7 +287,6 @@ hitamkanBtn.addEventListener(
             }
         }
 
-        // render final
         ctx.putImageData(
             imageData,
             0,
