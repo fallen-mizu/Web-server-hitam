@@ -30,7 +30,7 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Data gambar kosong.' });
         }
 
-        // PERKETAT INSTRUKSI VISION AGAR FOKUS PADA ANATOMI STRUKTUR KULIT UTUH
+        // MEMAKSA AI MENGIRIM TITIK POLIGON STRUKTUR KULIT SECARA DETAIL
         const response = await groq.chat.completions.create({
             model: "meta-llama/llama-4-scout-17b-16e-instruct",
             messages: [
@@ -39,7 +39,7 @@ export default async function handler(req, res) {
                     content: [
                         {
                             type: "text",
-                            text: "Analyze the anatomy of the anime character. Locate the entire continuous structure of visible skin on the face, forehead, cheeks, and neck. Do not cut the box in half because of shadows or highlights; detect the whole facial skin area as a unified block. Return a JSON object with a single key 'boxes' containing an array of boxes, where each box is [ymin, xmin, ymax, xmax] normalized from 0 to 100. Output ONLY the raw JSON object, no markdown, no explanation."
+                            text: "Act as an advanced image segmentation AI. Trace the exact perimeter of the visible skin on the anime character's face and neck. Identify 15 to 25 dense sequential landmark points [y, x] along the outline of the facial skin and neck skin to form a closed polygon mask. Scale all coordinates from 0 to 100 based on image dimensions. Return a JSON object with a single key 'points' containing the array of these coordinates. Example: {\"points\": [[20,45], [22,50], [28,55], [35,52], [32,42]]}. Output ONLY raw JSON."
                         },
                         {
                             type: "image_url",
@@ -59,5 +59,5 @@ export default async function handler(req, res) {
         console.error("Error backend:", error);
         return res.status(500).json({ error: 'Groq gagal memproses', message: error.message });
     }
-    }
-                    
+        }
+            
