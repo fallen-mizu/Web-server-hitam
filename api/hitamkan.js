@@ -50,6 +50,7 @@ export default async function handler(req, res) {
             });
         }
 
+        // ambil raw pixel
         const image =
         sharp(req.file.buffer);
 
@@ -58,7 +59,16 @@ export default async function handler(req, res) {
             info
         } = await image
         .raw()
-        .toBuffer({ resolveWithObject: true });
+        .toBuffer({
+            resolveWithObject: true
+        });
+
+        // target dark brown
+        const targetSkin = {
+            r: 92,
+            g: 58,
+            b: 38
+        };
 
         for (
             let i = 0;
@@ -70,43 +80,76 @@ export default async function handler(req, res) {
             let g = data[i + 1];
             let b = data[i + 2];
 
-            // deteksi warna kulit anime/manusia
+            // skin detection lebih smooth
             const isSkin = (
 
-                r > 95 &&
-                g > 40 &&
+                r > 65 &&
+                g > 35 &&
                 b > 20 &&
 
                 r > g &&
                 r > b &&
 
-                Math.abs(r - g) > 15
+                (r - g) > 8 &&
+                (r - b) > 12 &&
+
+                Math.abs(r - g) < 120
             );
 
             if (isSkin) {
 
-                // hitamkan kulit
-                data[i] =
-                Math.max(0, r * 0.65);
+                // preserve shading asli
+                const brightness =
+                (r + g + b) / 3 / 255;
 
-                data[i + 1] =
-                Math.max(0, g * 0.65);
+                // blend natural
+                data[i] = Math.min(
+                    255,
 
-                data[i + 2] =
-                Math.max(0, b * 0.65);
+                    Math.round(
+                        r * 0.58 +
+                        targetSkin.r * 0.42 * brightness
+                    )
+                );
+
+                data[i + 1] = Math.min(
+                    255,
+
+                    Math.round(
+                        g * 0.58 +
+                        targetSkin.g * 0.42 * brightness
+                    )
+                );
+
+                data[i + 2] = Math.min(
+                    255,
+
+                    Math.round(
+                        b * 0.58 +
+                        targetSkin.b * 0.42 * brightness
+                    )
+                );
             }
         }
 
+        // rebuild image halus
         const output =
         await sharp(data, {
+
             raw: {
                 width: info.width,
                 height: info.height,
                 channels: info.channels
             }
+
         })
 
-        .png()
+        .median(1)
+
+        .png({
+            compressionLevel: 0,
+            quality: 100
+        })
 
         .toBuffer();
 
@@ -119,10 +162,12 @@ export default async function handler(req, res) {
 
     } catch (err) {
 
+        console.log(err);
+
         return res.status(500).json({
 
             error:
             err.message
         });
     }
-                                      }
+}
